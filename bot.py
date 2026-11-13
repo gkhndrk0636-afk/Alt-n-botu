@@ -5,8 +5,7 @@ import pandas as pd
 import yfinance as yf
 from threading import Thread
 from flask import Flask
-
-TOKEN = "867931044:AAHoQKnLTDRrc76w5HFcC8Z_1lXXf9zS48"
+TOKEN = "867931044:AAHoQKnLTDRrc76w5HFcC8Z_llXxF9IfmWk"
 CHAT_ID = "1554567098"
 
 app = Flask('')
