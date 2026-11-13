@@ -6,7 +6,7 @@ import yfinance as yf
 from threading import Thread
 from flask import Flask
 
-# --- RENDER PORT GEREKSİNİMİ İÇİN FLASK SUNUCUSU ---
+# --- RENDER WEB SUNUCUSU (Port 10000) ---
 app = Flask('')
 
 @app.route('/')
@@ -17,7 +17,7 @@ def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# --- TELEGRAM VE BOT BİLGİLERİ ---
+# --- TELEGRAM BİLGİLERİ ---
 TOKEN = "867931044:AAHoQKnLTDRrc76w5HFcC8Z_1lXXf9zS48"
 CHAT_ID = "1554567098"
 
@@ -30,9 +30,10 @@ def send_telegram_message(message):
     }
     try:
         response = requests.post(url, json=payload)
+        print(f"Telegram Yanıtı: {response.status_code} - {response.text}")
         return response.json()
     except Exception as e:
-        print(f"Mesaj gonderme hatasi: {e}")
+        print(f"Telegram Bağlantı Hatası: {e}")
 
 def get_gold_data():
     symbols = ["GC=F", "XAUUSD=X", "GLD"]
@@ -49,7 +50,7 @@ def get_gold_data():
 def analyze_and_trade():
     df, used_symbol = get_gold_data()
     if df is None or len(df) < 30:
-        print("Yeterli piyasa verisi alinamadi.")
+        print("Piyasa verisi alınamadı.")
         return
 
     try:
@@ -63,32 +64,35 @@ def analyze_and_trade():
         print(f"Piyasa taranıyor ({used_symbol}) - Fiyat: {current_price:.2f}")
 
         if ema9 > ema21 and df['EMA9'].iloc[-2] <= df['EMA21'].iloc[-2]:
-            reason = f"🚀 **ALIM SİNYALİ (XAUUSD)**\n*Fiyat:* {current_price:.2f}\n*EMA9 yukarı kesti.*"
-            send_telegram_message(reason)
+            msg = f"🚀 **ALIM SİNYALİ (XAUUSD)**\n*Fiyat:* {current_price:.2f}\n*EMA9 yukarı kesti.*"
+            send_telegram_message(msg)
         elif ema9 < ema21 and df['EMA9'].iloc[-2] >= df['EMA21'].iloc[-2]:
-            reason = f"📉 **SATIM SİNYALİ (XAUUSD)**\n*Fiyat:* {current_price:.2f}\n*EMA9 aşağı kesti.*"
-            send_telegram_message(reason)
+            msg = f"📉 **SATIM SİNYALİ (XAUUSD)**\n*Fiyat:* {current_price:.2f}\n*EMA9 aşağı kesti.*"
+            send_telegram_message(msg)
 
     except Exception as e:
-        print(f"Analiz Hatasi: {e}")
+        print(f"Analiz Hatası: {e}")
 
 def main():
-    print("Xauusd Scalping Botu Devrede.")
-    time.sleep(5) # Sunucunun kendine gelmesi için kısa bir bekleme
-    send_telegram_message("🚀 **XAUUSD Scalping Botu Canlıya Alındı ve Çalışıyor!**")
+    print("Xauusd Scalping Botu Başlatılıyor...")
+    time.sleep(3)
+    
+    # Başlangıç mesajını gönderip sonucunu loglarda göreceğiz
+    res = send_telegram_message("🚀 **XAUUSD Scalping Botu Canlıya Alındı ve Çalışıyor!**")
+    print(f"Başlangıç Mesajı Sonucu: {res}")
     
     while True:
         try:
             analyze_and_trade()
         except Exception as e:
             print(f"Döngü hatası: {e}")
-        time.sleep(900)  # 15 dakikada bir kontrol eder
+        time.sleep(900)  # 15 dakikada bir tarar
 
 if __name__ == "__main__":
-    # Flask sunucusunu arka planda thread olarak başlat
+    # Flask sunucusunu arka planda başlat
     web_thread = Thread(target=run_web)
     web_thread.daemon = True
     web_thread.start()
     
-    # Ana bot döngüsünü doğrudan başlat
+    # Ana bot döngüsünü başlat
     main()
