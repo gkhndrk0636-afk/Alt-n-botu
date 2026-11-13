@@ -2,8 +2,7 @@ import os
 import time
 import requests
 from flask import Flask
-
-TOKEN = "867931044:AAE-UfzvItDPOw6oqaZjMaiTC-EWLL7nMo8"
+TOKEN = "9094158096:AAHTXv7fQ3_xpnriftXM81e-L5I0ENRQ1Vw"
 CHAT_ID = "1554567098"
 
 app = Flask('')
