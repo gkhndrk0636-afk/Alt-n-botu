@@ -6,20 +6,10 @@ import yfinance as yf
 from threading import Thread
 from flask import Flask
 
-# --- RENDER WEB SUNUCUSU (Port 10000) ---
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot Aktif ve Calisiyor!"
-
-def run_web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
-
-# --- TELEGRAM BİLGİLERİ ---
 TOKEN = "867931044:AAHoQKnLTDRrc76w5HFcC8Z_1lXXf9zS48"
 CHAT_ID = "1554567098"
+
+app = Flask('')
 
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -34,6 +24,12 @@ def send_telegram_message(message):
         return response.json()
     except Exception as e:
         print(f"Telegram Bağlantı Hatası: {e}")
+
+@app.route('/')
+def home():
+    # Tarayıcıdan siteye her girildiğinde test mesajı atacak
+    send_telegram_message("🔔 **Manuel Tetikleme:** Bot ve Web Sunucusu Çalışıyor!")
+    return "Bot Aktif, Telegram Mesaji Tetiklendi!"
 
 def get_gold_data():
     symbols = ["GC=F", "XAUUSD=X", "GLD"]
@@ -73,34 +69,24 @@ def analyze_and_trade():
     except Exception as e:
         print(f"Analiz Hatası: {e}")
 
-def main():
-    print("Xauusd Scalping Botu Başlatılıyor...")
-    time.sleep(3)
-    
-    # Başlangıç mesajını gönderip sonucunu loglarda göreceğiz
-    res = send_telegram_message("🚀 **XAUUSD Scalping Botu Canlıya Alındı ve Çalışıyor!**")
-    print(f"Başlangıç Mesajı Sonucu: {res}")
+def background_loop():
+    print("Xauusd Scalping Botu Arka Plan Döngüsü Başladı.")
+    time.sleep(5)
+    send_telegram_message("🚀 **XAUUSD Scalping Botu Canlıya Alındı ve Çalışıyor!**")
     
     while True:
         try:
             analyze_and_trade()
         except Exception as e:
             print(f"Döngü hatası: {e}")
-        time.sleep(900)  # 15 dakikada bir tarar
+        time.sleep(900)
 
 if __name__ == "__main__":
-    # Flask sunucusunu arka planda başlat
-    web_thread = Thread(target=run_web)
-    web_thread.daemon = True
-    web_thread.start()
-    
-    # Ana bot döngüsünü başlat
-    main()
-if __name__ == "__main__":
-    # Önce ana bot döngüsünü ayrı bir arka plan thread'i olarak başlatalım
-    bot_thread = Thread(target=main)
+    # Arka planda piyasa tarama döngüsünü başlat
+    bot_thread = Thread(target=background_loop)
     bot_thread.daemon = True
     bot_thread.start()
     
-    # Flask sunucusunu ana akışta çalıştıralım (Render portu beklediği için ana akışta olmalı)
-    run_web()
+    # Flask sunucusunu port 10000'de başlat
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
