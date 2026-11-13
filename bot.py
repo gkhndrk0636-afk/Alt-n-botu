@@ -17,10 +17,6 @@ def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-def keep_alive():
-    t = Thread(target=run_web)
-    t.start()
-
 # --- TELEGRAM VE BOT BİLGİLERİ ---
 TOKEN = "867931044:AAHoQKnLTDRrc76w5HFcC8Z_1lXXf9zS48"
 CHAT_ID = "1554567098"
@@ -57,7 +53,6 @@ def analyze_and_trade():
         return
 
     try:
-        # EMA Hesaplamaları
         df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
         df['EMA21'] = df['Close'].ewm(span=21, adjust=False).mean()
         
@@ -67,7 +62,6 @@ def analyze_and_trade():
 
         print(f"Piyasa taranıyor ({used_symbol}) - Fiyat: {current_price:.2f}")
 
-        # Basit Strateji Sinyali (EMA Kesişimi Örneği)
         if ema9 > ema21 and df['EMA9'].iloc[-2] <= df['EMA21'].iloc[-2]:
             reason = f"🚀 **ALIM SİNYALİ (XAUUSD)**\n*Fiyat:* {current_price:.2f}\n*EMA9 yukarı kesti.*"
             send_telegram_message(reason)
@@ -80,12 +74,21 @@ def analyze_and_trade():
 
 def main():
     print("Xauusd Scalping Botu Devrede.")
+    time.sleep(5) # Sunucunun kendine gelmesi için kısa bir bekleme
     send_telegram_message("🚀 **XAUUSD Scalping Botu Canlıya Alındı ve Çalışıyor!**")
     
     while True:
-        analyze_and_trade()
+        try:
+            analyze_and_trade()
+        except Exception as e:
+            print(f"Döngü hatası: {e}")
         time.sleep(900)  # 15 dakikada bir kontrol eder
 
 if __name__ == "__main__":
-    keep_alive()  # Önce Render portunu aktif eder
-    main()        # Sonra bot döngüsünü başlatır
+    # Flask sunucusunu arka planda thread olarak başlat
+    web_thread = Thread(target=run_web)
+    web_thread.daemon = True
+    web_thread.start()
+    
+    # Ana bot döngüsünü doğrudan başlat
+    main()
