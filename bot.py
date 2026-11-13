@@ -96,3 +96,11 @@ if __name__ == "__main__":
     
     # Ana bot döngüsünü başlat
     main()
+if __name__ == "__main__":
+    # Önce ana bot döngüsünü ayrı bir arka plan thread'i olarak başlatalım
+    bot_thread = Thread(target=main)
+    bot_thread.daemon = True
+    bot_thread.start()
+    
+    # Flask sunucusunu ana akışta çalıştıralım (Render portu beklediği için ana akışta olmalı)
+    run_web()
