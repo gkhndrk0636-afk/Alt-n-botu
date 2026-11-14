@@ -1,32 +1,38 @@
 import os
-import time
-import requests
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from flask import Flask
-TOKEN = "9094158096:AAHTXv7fQ3_xpnriftXM81e-L5I0ENRQ1Vw"
-CHAT_ID = "1554567098"
+
+GMAIL_USER = "gkhndrk0636@gmail.com"
+GMAIL_APP_PASSWORD = "fqjk iycr ytvr zfgf"
 
 app = Flask('')
 
-def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
+def send_email_notification(message_body):
     try:
-        response = requests.post(url, json=payload)
-        print(f"Telegram Yanıt Kodu: {response.status_code}")
-        print(f"Telegram Yanıt İçeriği: {response.text}")
-        return response.json()
+        msg = MIMEMultipart()
+        msg['From'] = GMAIL_USER
+        msg['To'] = GMAIL_USER
+        msg['Subject'] = "🚨 XAUUSD Scalping Sinyal Bildirimi"
+        
+        msg.attach(MIMEText(message_body, 'plain'))
+        
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+        server.sendmail(GMAIL_USER, GMAIL_USER, msg.as_string())
+        server.quit()
+        print("E-posta başarıyla gönderildi!")
+        return "Başarılı"
     except Exception as e:
-        print(f"Bağlantı Hatası: {e}")
+        print(f"E-posta Gönderme Hatası: {e}")
+        return f"Hata: {e}"
 
 @app.route('/')
 def home():
-    # Sayfaya her girildiğinde Telegram'a test mesajı tetiklenecek
-    result = send_telegram_message("🔔 **Test Başarılı!** Bot ve Render Bağlantısı Çalışıyor.")
-    return f"Bot Aktif! Telegram Yanıtı: {result}"
+    durum = send_email_notification("🚀 XAUUSD Scalping Botu: E-posta bildirim sistemi başarıyla aktif ve çalışıyor!")
+    return f"Bot Servisi Çalışıyor! Mail Durumu: {durum}"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
