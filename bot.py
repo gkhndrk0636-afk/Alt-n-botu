@@ -106,8 +106,8 @@ def analyze_xauusd_market():
     except Exception as e:
         return f"Analiz Motoru Hatası: {e}"
 
-@app.route('/ping')
-def ping():
+@app.route('/')
+def home():
     return "OK", 200
 
 
