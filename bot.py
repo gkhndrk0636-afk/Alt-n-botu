@@ -1,4 +1,6 @@
 import os
+import time
+import threading
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -99,18 +101,30 @@ def analyze_xauusd_market():
             
         if signal:
             send_email_notification("🚨 XAUUSD Profesyonel Sinyal & Risk Raporu", signal)
-            return f"Sinyal Üretildi ve Gönderildi:<br><pre>{signal}</pre>"
+            print("Sinyal Üretildi ve Gönderildi.")
         else:
-            return f"Piyasa taranıyor (Hafta sonu kapanış verileriyle)... Şu an net bir kesişim yok.<br>Güncel Fiyat: {c_price:.2f} | 1 Saatlik Trend: {trend_1h}"
+            print(f"Piyasa taranıyor... Güncel Fiyat: {c_price:.2f} | 1 Saatlik Trend: {trend_1h}")
             
     except Exception as e:
-        return f"Analiz Motoru Hatası: {e}"
+        print(f"Analiz Motoru Hatası: {e}")
+
+# Arka planda sürekli çalışacak döngü (Her 15 dakikada bir tarama yapar)
+def background_trader():
+    while True:
+        print("Arka plan taraması başlatılıyor...")
+        analyze_xauusd_market()
+        # 15 dakika = 900 saniye
+        time.sleep(900)
 
 @app.route('/')
 def home():
-    return "OK", 200
-
+    return "OK - Bot Arka Planda Çalışıyor", 200
 
 if __name__ == "__main__":
+    # Arka plan iş parçacığını (thread) başlatıyoruz
+    t = threading.Thread(target=background_trader)
+    t.daemon = True
+    t.start()
+    
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
