@@ -109,7 +109,7 @@ def analyze_xauusd_market():
 @app.route('/')
 def home():
     sonuc = analyze_xauusd_market()
-    return f"<h3>XAUUSD Scalping Botu Çalışıyor 🚀</h3><p>{sonuc}</p>"
+    return "OK",200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
