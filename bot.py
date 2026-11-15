@@ -106,10 +106,10 @@ def analyze_xauusd_market():
     except Exception as e:
         return f"Analiz Motoru Hatası: {e}"
 
-@app.route('/')
-def home():
-    sonuc = analyze_xauusd_market()
-    return "OK",200
+@app.route('/ping')
+def ping():
+    return "OK", 200
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
