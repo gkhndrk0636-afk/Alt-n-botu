@@ -2,14 +2,8 @@ name: XAUUSD Altin Botu
 
 on:
   workflow_dispatch:
-    inputs:
-      test_mode:
-        description: "Sinyal beklemeden test e-postası gönder"
-        required: true
-        default: false
-        type: boolean
   schedule:
-    - cron: "*/15 * * * 1-5"
+    - cron: "*/5 * * * *"
 
 permissions:
   contents: write
@@ -33,7 +27,6 @@ jobs:
       - name: Altin botunu calistir
         env:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          TEST_MODE: ${{ github.event.inputs.test_mode || 'false' }}
         run: python xauusd_bot.py
 
       - name: Sinyal kaydini sakla
