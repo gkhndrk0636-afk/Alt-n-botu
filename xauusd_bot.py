@@ -20,7 +20,7 @@ def get_market_data():
     url = (
         "https://yahoo.com"
         + SYMBOL
-        + "?interval=15m&range=1mo"
+        + "?interval=15m&range=5d"
     )
 
     req = urllib.request.Request(
@@ -45,8 +45,8 @@ def get_market_data():
 
     df = df.dropna().reset_index(drop=True)
 
-    if len(df) < 220:
-        raise ValueError("EMA200 hesabı için yeterli piyasa verisi yok.")
+    if len(df) < 205:
+        raise ValueError("Yeterli piyasa verisi yok.")
 
     return df
 
