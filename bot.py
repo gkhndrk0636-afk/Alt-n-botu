@@ -40,27 +40,26 @@ def calculate_rsi(data, window=14):
 
 @app.route('/test')
 def test_mail():
-    test_body = (
-        "✅ GELİŞMİŞ EMA (5/13, 9/21) & RSI SİSTEMİ TESTİ BAŞARILI!\n"
-        "----------------------------------------\n"
-        "XAUUSD Botu çoklu indikatör filtreleriyle aktif ve sorunsuz çalışıyor."
-    )
-    success, info = send_email_notification("🔔 XAUUSD Botu - Gelişmiş Test", test_body)
-    if success:
-        return "OK - Test maili gönderildi!", 200
-    else:
-        return f"HATA - Mail gönderilemedi: {info}", 200
+    try:
+        success, info = send_email_notification("🔔 XAUUSD Botu - Test Bildirimi", "✅ Test maili başarıyla gönderildi! Sistem aktif.")
+        if success:
+            return "OK - Test maili gonderildi!", 200
+        else:
+            return f"HATA - Mail gonderilemedi: {info}", 200
+    except Exception as e:
+        return f"Hata: {e}", 200
 
 @app.route('/')
 def home():
     global last_signal_type
     try:
-        data_1h = yf.download("GC=F", interval="1h", period="5d", progress=False)
-        data_15m = yf.download("GC=F", interval="15m", period="2d", progress=False)
-        data_5m = yf.download("GC=F", interval="5m", period="1d", progress=False)
+        # Verileri güvenli şekilde çekiyoruz
+        data_1h = yf.download("GC=F", interval="1h", period="5d", progress=False, timeout=10)
+        data_15m = yf.download("GC=F", interval="15m", period="2d", progress=False, timeout=10)
+        data_5m = yf.download("GC=F", interval="5m", period="1d", progress=False, timeout=10)
         
-        if data_1h.empty or data_15m.empty or data_5m.empty:
-            return "Piyasa verisi alınamadı.", 200
+        if data_1h is None or data_15m is None or data_5m is None or data_1h.empty or data_15m.empty or data_5m.empty:
+            return "OK - Piyasa verisi bekleniyor (Veri boş döndü).", 200
             
         for df in [data_1h, data_15m, data_5m]:
             if isinstance(df.columns, pd.MultiIndex):
@@ -70,7 +69,7 @@ def home():
         data_1h['EMA9'] = data_1h['Close'].ewm(span=9, adjust=False).mean()
         data_1h['EMA21'] = data_1h['Close'].ewm(span=21, adjust=False).mean()
         
-        # 15m ve 5m için hem (5,13) hem (9,21) hesaplamaları
+        # 15m ve 5m hesaplamaları
         for df in [data_15m, data_5m]:
             df['EMA5'] = df['Close'].ewm(span=5, adjust=False).mean()
             df['EMA13'] = df['Close'].ewm(span=13, adjust=False).mean()
@@ -78,19 +77,25 @@ def home():
             df['EMA21'] = df['Close'].ewm(span=21, adjust=False).mean()
             df['RSI'] = calculate_rsi(df)
 
-        c_price = float(data_5m['Close'].iloc[-1].iloc[0] if isinstance(data_5m['Close'].iloc[-1], pd.Series) else data_5m['Close'].iloc[-1])
+        c_close = data_5m['Close'].iloc[-1]
+        c_price = float(c_close.iloc[0] if isinstance(c_close, pd.Series) else c_close)
         
-        trend_val_1h = float(data_1h['EMA9'].iloc[-1].iloc[0] if isinstance(data_1h['EMA9'].iloc[-1], pd.Series) else data_1h['EMA9'].iloc[-1]) > float(data_1h['EMA21'].iloc[-1].iloc[0] if isinstance(data_1h['EMA21'].iloc[-1], pd.Series) else data_1h['EMA21'].iloc[-1])
-        trend_1h = "YÜKSELİŞ (BULLISH)" if trend_val_1h else "DÜŞÜŞ (BEARISH)"
+        h1_e9 = data_1h['EMA9'].iloc[-1]
+        h1_e21 = data_1h['EMA21'].iloc[-1]
+        val_e9 = float(h1_e9.iloc[0] if isinstance(h1_e9, pd.Series) else h1_e9)
+        val_e21 = float(h1_e21.iloc[0] if isinstance(h1_e21, pd.Series) else h1_e21)
+        
+        trend_1h = "YÜKSELİŞ (BULLISH)" if val_e9 > val_e21 else "DÜŞÜŞ (BEARISH)"
         
         signal = None
         current_type = None
 
-        # Değerleri güvenli alalım (15m ve 5m için)
-        current_rsi_15m = float(data_15m['RSI'].iloc[-1].iloc[0] if isinstance(data_15m['RSI'].iloc[-1], pd.Series) else data_15m['RSI'].iloc[-1])
-        current_rsi_5m = float(data_5m['RSI'].iloc[-1].iloc[0] if isinstance(data_5m['RSI'].iloc[-1], pd.Series) else data_5m['RSI'].iloc[-1])
+        r15 = data_15m['RSI'].iloc[-1]
+        r5 = data_5m['RSI'].iloc[-1]
+        current_rsi_15m = float(r15.iloc[0] if isinstance(r15, pd.Series) else r15)
+        current_rsi_5m = float(r5.iloc[0] if isinstance(r5, pd.Series) else r5)
 
-        # --- 1. 15M KESİŞİM KONTROLÜ (EMA 5/13 ve EMA 9/21 + RSI Filtresi) ---
+        # --- 15M KESİŞİM ---
         p1_15_e5 = float(data_15m['EMA5'].iloc[-2].iloc[0] if isinstance(data_15m['EMA5'].iloc[-2], pd.Series) else data_15m['EMA5'].iloc[-2])
         p1_15_e13 = float(data_15m['EMA13'].iloc[-2].iloc[0] if isinstance(data_15m['EMA13'].iloc[-2], pd.Series) else data_15m['EMA13'].iloc[-2])
         c_15_e5 = float(data_15m['EMA5'].iloc[-1].iloc[0] if isinstance(data_15m['EMA5'].iloc[-1], pd.Series) else data_15m['EMA5'].iloc[-1])
@@ -123,7 +128,7 @@ def home():
                 f"----------------------------------------"
             )
 
-        # --- 2. 5M KESİŞİM KONTROLÜ ---
+        # --- 5M KESİŞİM ---
         if not signal:
             p1_5_e5 = float(data_5m['EMA5'].iloc[-2].iloc[0] if isinstance(data_5m['EMA5'].iloc[-2], pd.Series) else data_5m['EMA5'].iloc[-2])
             p1_5_e13 = float(data_5m['EMA13'].iloc[-2].iloc[0] if isinstance(data_5m['EMA13'].iloc[-2], pd.Series) else data_5m['EMA13'].iloc[-2])
@@ -162,10 +167,10 @@ def home():
             last_signal_type = current_type
             return f"OK - Sinyal Gonderildi ({current_type}) | Fiyat: {c_price:.2f}", 200
         else:
-            return f"OK - Gelişmiş Tarama Aktif | Fiyat: {c_price:.2f} | RSI(5m): {current_rsi_5m:.1f}", 200
+            return f"OK - Tarama Aktif | Fiyat: {c_price:.2f} | RSI(5m): {current_rsi_5m:.1f}", 200
             
     except Exception as e:
-        return f"Hata: {e}", 200
+        return f"OK - Sistem Aktif (Veri bekleniyor: {e})", 200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
