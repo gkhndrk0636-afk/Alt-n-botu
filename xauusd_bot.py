@@ -18,9 +18,9 @@ STATE_FILE = "state.json"
 
 def get_market_data():
     url = (
-        "https://query1.finance.yahoo.com/v8/finance/chart/"
+        "https://yahoo.com"
         + SYMBOL
-        + "?interval=15m&range=5d"
+        + "?interval=15m&range=1mo"
     )
 
     req = urllib.request.Request(
@@ -45,8 +45,8 @@ def get_market_data():
 
     df = df.dropna().reset_index(drop=True)
 
-    if len(df) < 60:
-        raise ValueError("Yeterli piyasa verisi yok.")
+    if len(df) < 220:
+        raise ValueError("EMA200 hesabı için yeterli piyasa verisi yok.")
 
     return df
 
@@ -54,6 +54,7 @@ def get_market_data():
 def calculate_indicators(df):
     df["ema20"] = df["close"].ewm(span=20, adjust=False).mean()
     df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
+    df["ema200"] = df["close"].ewm(span=200, adjust=False).mean()
 
     delta = df["close"].diff()
     gain = delta.clip(lower=0)
@@ -85,7 +86,7 @@ def send_email(subject, body):
 
     msg.attach(MIMEText(body, "plain", "utf-8"))
 
-    with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
+    with smtplib.SMTP("://gmail.com", 587, timeout=20) as server:
         server.starttls()
         server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
         server.sendmail(GMAIL_USER, GMAIL_USER, msg.as_string())
@@ -117,7 +118,6 @@ def run_bot():
     df = get_market_data()
     df = calculate_indicators(df)
 
-    # Açık olan son mumu (iloc[-1]) hariç tut, kapanmış mumları al
     closed_candles = df.iloc[:-1].copy()
 
     if TEST_MODE:
@@ -125,9 +125,10 @@ def run_bot():
         test_msg = f"""
 XAUUSD BOT TEST BİLDİRİMİ
 
-Bot başarıyla çalıştı ve Yahoo Finance verisi çekildi.
+Bot başarıyla çalıştı ve EMA200 korumalı veri çekildi.
 Son Kapanan Fiyat: {float(latest['close']):.2f}
 EMA20: {float(latest['ema20']):.2f} | EMA50: {float(latest['ema50']):.2f}
+EMA200 (Ana Trend): {float(latest['ema200']):.2f}
 RSI: {float(latest['rsi']):.2f} | ATR: {float(latest['atr']):.2f}
 Mum Zamanı (UTC): {latest['time'].isoformat()}
 """
@@ -139,7 +140,6 @@ Mum Zamanı (UTC): {latest['time'].isoformat()}
     last_processed = state["last_processed"]
     last_signal = state["last_signal"]
 
-    # Eğer ilk kez çalışıyorsa sadece en son kapanan mumu kontrol et
     if not last_processed:
         candles_to_check = closed_candles.iloc[-1:]
     else:
@@ -160,6 +160,7 @@ Mum Zamanı (UTC): {latest['time'].isoformat()}
         price = float(candle["close"])
         ema20 = float(candle["ema20"])
         ema50 = float(candle["ema50"])
+        ema200 = float(candle["ema200"])
         rsi = float(candle["rsi"])
         atr = float(candle["atr"])
 
@@ -168,11 +169,13 @@ Mum Zamanı (UTC): {latest['time'].isoformat()}
 
         signal = None
 
-        if ema20 > ema50 and 50 <= rsi <= 70:
+        # BUY: Kısa trend yukarı (EMA20 > EMA50) + Ana trend yukarı (Fiyat > EMA200) + RSI uygun
+        if ema20 > ema50 and price > ema200 and 50 <= rsi <= 70:
             signal = "BUY"
             sl = price - atr * 1.5
             tp = price + atr * 3
-        elif ema20 < ema50 and 30 <= rsi <= 50:
+        # SELL: Kısa trend aşağı (EMA20 < EMA50) + Ana trend aşağı (Fiyat < EMA200) + RSI uygun
+        elif ema20 < ema50 and price < ema200 and 30 <= rsi <= 50:
             signal = "SELL"
             sl = price + atr * 1.5
             tp = price - atr * 3
@@ -191,6 +194,7 @@ Take Profit: {tp:.2f}
 
 EMA20: {ema20:.2f}
 EMA50: {ema50:.2f}
+EMA200: {ema200:.2f}
 RSI: {rsi:.2f}
 ATR: {atr:.2f}
 
@@ -203,7 +207,7 @@ Otomatik işlem: KAPALI
         elif signal == last_signal:
             print(f"{candle_time} -> {signal} devam ediyor (tekrar mail atılmadı).")
         else:
-            print(f"{candle_time} -> WAIT (Fiyat: {price:.2f}, RSI: {rsi:.2f})")
+            print(f"{candle_time} -> WAIT (Fiyat: {price:.2f}, EMA200: {ema200:.2f}, RSI: {rsi:.2f})")
             last_signal = "NONE"
 
     save_state(latest_time, last_signal)
