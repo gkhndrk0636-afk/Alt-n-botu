@@ -11,6 +11,9 @@ GMAIL_APP_PASSWORD = "fqjk iycr ytvr zfgf"
 
 app = Flask('')
 
+# Aynı sinyali üst üste göndermemek için son sinyal yönünü tutar
+last_signal_type = None
+
 def send_email_notification(subject, message_body):
     try:
         msg = MIMEMultipart()
@@ -25,16 +28,30 @@ def send_email_notification(subject, message_body):
         server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
         server.sendmail(GMAIL_USER, GMAIL_USER, msg.as_string())
         server.quit()
-        print("Profesyonel Sinyal E-postası Gönderildi!")
-        return "Başarılı"
+        print("E-posta Gönderildi!")
+        return True, "Başarılı"
     except Exception as e:
         print(f"E-posta Gönderme Hatası: {e}")
-        return f"Hata: {e}"
+        return False, str(e)
+
+@app.route('/test')
+def test_mail():
+    test_body = (
+        "✅ TEST BAŞARILI!\n"
+        "----------------------------------------\n"
+        "XAUUSD Scalping Botu e-posta bildirim sistemi sorunsuz çalışıyor.\n"
+        "Piyasada EMA9/EMA21 kesişimi oluştuğunda sinyaller bu formatta telefonuna düşecek."
+    )
+    success, info = send_email_notification("🔔 XAUUSD Botu - Test Bildirimi", test_body)
+    if success:
+        return "OK - Test maili gönderildi! Gelen kutunu (ve gereksiz/spam klasörünü) kontrol et.", 200
+    else:
+        return f"HATA - Mail gönderilemedi: {info}", 200
 
 @app.route('/')
 def home():
+    global last_signal_type
     try:
-        # Verileri çekiyoruz
         data_1h = yf.download("GC=F", interval="1h", period="5d", progress=False)
         data_15m = yf.download("GC=F", interval="15m", period="2d", progress=False)
         
@@ -62,42 +79,46 @@ def home():
         trend_1h = "YÜKSELİŞ (BULLISH)" if trend_val_1h else "DÜŞÜŞ (BEARISH)"
         
         signal = None
+        current_type = None
         
         if p1_e9 <= p1_e21 and c_e9 > c_e21:
+            current_type = "BUY"
             stop_loss = c_price - 3.50
             take_profit = c_price + 7.00
             signal = (
-                f"🟢 **PROFESYONEL XAUUSD AL (BUY) SİNYALİ**\n"
+                f"🟢 PROFESYONEL XAUUSD AL (BUY) SİNYALİ\n"
                 f"----------------------------------------\n"
-                f"📍 **Giriş Fiyatı:** {c_price:.2f}\n"
-                f"🛑 **Zarar Kes (Stop Loss):** {stop_loss:.2f}\n"
-                f"🎯 **Kar Al (Take Profit):** {take_profit:.2f}\n"
-                f"📊 **15m EMA9/EMA21:** {c_e9:.2f} / {c_e21:.2f}\n"
-                f"📈 **1 Saatlik Ana Trend:** {trend_1h}\n"
+                f"📍 Giriş Fiyatı: {c_price:.2f}\n"
+                f"🛑 Zarar Kes (Stop Loss): {stop_loss:.2f}\n"
+                f"🎯 Kar Al (Take Profit): {take_profit:.2f}\n"
+                f"📊 15m EMA9/EMA21: {c_e9:.2f} / {c_e21:.2f}\n"
+                f"📈 1 Saatlik Ana Trend: {trend_1h}\n"
                 f"----------------------------------------\n"
-                f"⚡ *Strateji: EMA Kesişimi & Risk/Ödül 1:2*"
+                f"⚡ Strateji: EMA Kesişimi & Risk/Ödül 1:2"
             )
             
         elif p1_e9 >= p1_e21 and c_e9 < c_e21:
+            current_type = "SELL"
             stop_loss = c_price + 3.50
             take_profit = c_price - 7.00
             signal = (
-                f"🔴 **PROFESYONEL XAUUSD SAT (SELL) SİNYALİ**\n"
+                f"🔴 PROFESYONEL XAUUSD SAT (SELL) SİNYALİ\n"
                 f"----------------------------------------\n"
-                f"📍 **Giriş Fiyatı:** {c_price:.2f}\n"
-                f"🛑 **Zarar Kes (Stop Loss):** {stop_loss:.2f}\n"
-                f"🎯 **Kar Al (Take Profit):** {take_profit:.2f}\n"
-                f"📊 **15m EMA9/EMA21:** {c_e9:.2f} / {c_e21:.2f}\n"
-                f"📉 **1 Saatlik Ana Trend:** {trend_1h}\n"
+                f"📍 Giriş Fiyatı: {c_price:.2f}\n"
+                f"🛑 Zarar Kes (Stop Loss): {stop_loss:.2f}\n"
+                f"🎯 Kar Al (Take Profit): {take_profit:.2f}\n"
+                f"📊 15m EMA9/EMA21: {c_e9:.2f} / {c_e21:.2f}\n"
+                f"📉 1 Saatlik Ana Trend: {trend_1h}\n"
                 f"----------------------------------------\n"
-                f"⚡ *Strateji: EMA Kesişimi & Risk/Ödül 1:2*"
+                f"⚡ Strateji: EMA Kesişimi & Risk/Ödül 1:2"
             )
             
-        if signal:
+        if signal and current_type != last_signal_type:
             send_email_notification("🚨 XAUUSD Profesyonel Sinyal & Risk Raporu", signal)
-            return f"OK - Sinyal Gonderildi | Fiyat: {c_price:.2f}", 200
+            last_signal_type = current_type
+            return f"OK - Sinyal Gonderildi ({current_type}) | Fiyat: {c_price:.2f}", 200
         else:
-            return f"OK - Piyasa Taranıyor | Fiyat: {c_price:.2f}", 200
+            return f"OK - Piyasa Taranıyor | Fiyat: {c_price:.2f} | EMA9: {c_e9:.2f} / EMA21: {c_e21:.2f}", 200
             
     except Exception as e:
         return f"Hata: {e}", 200
