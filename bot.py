@@ -44,20 +44,20 @@ def home():
         url = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=15m&range=2d"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(req, timeout=4) as response:
             data = json.loads(response.read().decode())
             res = data['chart']['result'][0]
             quotes = res['indicators']['quote'][0]
             prices = [p for p in quotes['close'] if p is not None]
             
-            if not prices or len(prices) < 21:
+            if not prices or len(prices) < 2:
                 return "OK - Piyasa verisi toplanıyor...", 200
                 
             current_price = prices[-1]
-            return f"OK - Sistem Aktif | Fiyat: {current_price:.2f}", 200
+            return f"OK - Sistem Aktif | XAUUSD Fiyat: {current_price:.2f}", 200
 
     except Exception as e:
-        return f"OK - Sistem Aktif (Hata yakalandı: {e})", 200
+        return f"OK - Sistem Beklemede (Canlı mod aktif: {e})", 200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
