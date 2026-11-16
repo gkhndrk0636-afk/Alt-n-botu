@@ -1,8 +1,8 @@
-
 import os
 import json
 import urllib.request
 import smtplib
+import traceback
 import pandas as pd
 
 from email.mime.text import MIMEText
@@ -10,6 +10,7 @@ from email.mime.multipart import MIMEMultipart
 
 GMAIL_USER = "gkhndrk0636@gmail.com"
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
+TEST_MODE = os.getenv("TEST_MODE", "false").lower() == "true"
 
 SYMBOL = "GC=F"
 STATE_FILE = "state.json"
@@ -51,35 +52,23 @@ def get_market_data():
 
 
 def calculate_indicators(df):
-    df["ema20"] = df["close"].ewm(
-        span=20, adjust=False
-    ).mean()
-
-    df["ema50"] = df["close"].ewm(
-        span=50, adjust=False
-    ).mean()
+    df["ema20"] = df["close"].ewm(span=20, adjust=False).mean()
+    df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
 
     delta = df["close"].diff()
-
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
 
     avg_gain = gain.rolling(14).mean()
     avg_loss = loss.rolling(14).mean()
-
     rs = avg_gain / avg_loss.replace(0, float("nan"))
-
     df["rsi"] = 100 - (100 / (1 + rs))
 
     high_low = df["high"] - df["low"]
     high_close = (df["high"] - df["close"].shift()).abs()
     low_close = (df["low"] - df["close"].shift()).abs()
 
-    tr = pd.concat(
-        [high_low, high_close, low_close],
-        axis=1
-    ).max(axis=1)
-
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
     df["atr"] = tr.rolling(14).mean()
 
     return df
@@ -87,7 +76,7 @@ def calculate_indicators(df):
 
 def send_email(subject, body):
     if not GMAIL_APP_PASSWORD:
-        raise ValueError("GMAIL_APP_PASSWORD eksik.")
+        raise ValueError("GMAIL_APP_PASSWORD eksik! GitHub Secrets ayarını kontrol edin.")
 
     msg = MIMEMultipart()
     msg["From"] = GMAIL_USER
@@ -105,14 +94,21 @@ def send_email(subject, body):
 def read_state():
     try:
         with open(STATE_FILE, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            return {
+                "last_processed": data.get("last_processed", ""),
+                "last_signal": data.get("last_signal", "NONE")
+            }
     except (FileNotFoundError, json.JSONDecodeError):
-        return {"last_processed": ""}
+        return {"last_processed": "", "last_signal": "NONE"}
 
 
-def save_state(candle_time):
+def save_state(candle_time, last_signal):
     with open(STATE_FILE, "w") as f:
-        json.dump({"last_processed": candle_time}, f)
+        json.dump({
+            "last_processed": candle_time,
+            "last_signal": last_signal
+        }, f, indent=2)
 
 
 def run_bot():
@@ -121,44 +117,71 @@ def run_bot():
     df = get_market_data()
     df = calculate_indicators(df)
 
-    # Son mum henüz tamamlanmamış olabilir.
-    candle = df.iloc[-2]
+    # Açık olan son mumu (iloc[-1]) hariç tut, kapanmış mumları al
+    closed_candles = df.iloc[:-1].copy()
 
-    candle_time = candle["time"].isoformat()
+    if TEST_MODE:
+        latest = closed_candles.iloc[-1]
+        test_msg = f"""
+XAUUSD BOT TEST BİLDİRİMİ
 
-    state = read_state()
-
-    if state.get("last_processed") == candle_time:
-        print("Bu mum daha önce kontrol edildi.")
+Bot başarıyla çalıştı ve Yahoo Finance verisi çekildi.
+Son Kapanan Fiyat: {float(latest['close']):.2f}
+EMA20: {float(latest['ema20']):.2f} | EMA50: {float(latest['ema50']):.2f}
+RSI: {float(latest['rsi']):.2f} | ATR: {float(latest['atr']):.2f}
+Mum Zamanı (UTC): {latest['time'].isoformat()}
+"""
+        send_email("XAUUSD Bot - Test Başarılı", test_msg)
+        print("Test e-postası gönderildi.")
         return
 
-    price = float(candle["close"])
-    ema20 = float(candle["ema20"])
-    ema50 = float(candle["ema50"])
-    rsi = float(candle["rsi"])
-    atr = float(candle["atr"])
+    state = read_state()
+    last_processed = state["last_processed"]
+    last_signal = state["last_signal"]
 
-    if pd.isna(rsi) or pd.isna(atr):
-        raise ValueError("İndikatör verisi eksik.")
+    # Eğer ilk kez çalışıyorsa sadece en son kapanan mumu kontrol et
+    if not last_processed:
+        candles_to_check = closed_candles.iloc[-1:]
+    else:
+        candles_to_check = closed_candles[
+            closed_candles["time"].apply(lambda x: x.isoformat() > last_processed)
+        ]
 
-    signal = None
+    if candles_to_check.empty:
+        print("Yeni kapanmış mum yok. Beklemede.")
+        return
 
-    if ema20 > ema50 and 50 <= rsi <= 70:
-        signal = "BUY"
-        sl = price - atr * 1.5
-        tp = price + atr * 3
+    latest_time = last_processed
 
-    elif ema20 < ema50 and 30 <= rsi <= 50:
-        signal = "SELL"
-        sl = price + atr * 1.5
-        tp = price - atr * 3
+    for _, candle in candles_to_check.iterrows():
+        candle_time = candle["time"].isoformat()
+        latest_time = candle_time
 
-    if signal:
-        message = f"""
+        price = float(candle["close"])
+        ema20 = float(candle["ema20"])
+        ema50 = float(candle["ema50"])
+        rsi = float(candle["rsi"])
+        atr = float(candle["atr"])
+
+        if pd.isna(rsi) or pd.isna(atr):
+            continue
+
+        signal = None
+
+        if ema20 > ema50 and 50 <= rsi <= 70:
+            signal = "BUY"
+            sl = price - atr * 1.5
+            tp = price + atr * 3
+        elif ema20 < ema50 and 30 <= rsi <= 50:
+            signal = "SELL"
+            sl = price + atr * 1.5
+            tp = price - atr * 3
+
+        if signal and signal != last_signal:
+            message = f"""
 XAUUSD ALTIN SİNYALİ
 
 Sinyal: {signal}
-
 Veri kaynağı: Yahoo Finance GC=F
 Zaman dilimi: 15 dakika
 
@@ -171,22 +194,29 @@ EMA50: {ema50:.2f}
 RSI: {rsi:.2f}
 ATR: {atr:.2f}
 
-Mum zamanı: {candle_time}
-
+Mum zamanı (UTC): {candle_time}
 Otomatik işlem: KAPALI
-
-Bu bir teknik analiz sinyalidir.
-XM XAUUSD fiyatıyla birebir aynı olmayabilir.
 """
+            send_email(f"XAUUSD {signal} SİNYALİ ({price:.2f})", message)
+            print(f"{candle_time} için {signal} sinyali gönderildi.")
+            last_signal = signal
+        elif signal == last_signal:
+            print(f"{candle_time} -> {signal} devam ediyor (tekrar mail atılmadı).")
+        else:
+            print(f"{candle_time} -> WAIT (Fiyat: {price:.2f}, RSI: {rsi:.2f})")
+            last_signal = "NONE"
 
-        send_email("XAUUSD " + signal + " SİNYALİ", message)
-        print(message)
-
-    else:
-        print("WAIT - İşlem sinyali yok.")
-
-    save_state(candle_time)
+    save_state(latest_time, last_signal)
 
 
 if __name__ == "__main__":
-    run_bot()
+    try:
+        run_bot()
+    except Exception as e:
+        error_details = traceback.format_exc()
+        print("HATA OLUŞTU:\n", error_details)
+        try:
+            send_email("XAUUSD Bot Hata Bildirimi", f"Bot çalışırken hata oluştu:\n\n{error_details}")
+        except Exception:
+            pass
+        raise
