@@ -1,514 +1,192 @@
+
 import os
-import time
+import json
+import urllib.request
 import smtplib
-import MetaTrader5 as mt5
 import pandas as pd
 
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-
-# =========================================================
-# AYARLAR
-# =========================================================
-
-SYMBOL = "XAUUSD"
-TIMEFRAME = mt5.TIMEFRAME_M15
-
-# Gmail adresin
 GMAIL_USER = "gkhndrk0636@gmail.com"
-
-# Gmail App Password GitHub'a yazılmayacak.
-# Render / sunucu ortam değişkeninden alınacak.
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
 
-# XM MT5 bilgileri
-XM_LOGIN = os.getenv("XM_LOGIN", "")
-XM_PASSWORD = os.getenv("XM_PASSWORD", "")
-XM_SERVER = os.getenv("XM_SERVER", "")
+SYMBOL = "GC=F"
+STATE_FILE = "state.json"
 
-# Son gönderilen sinyali takip etmek için
-last_signal = None
-last_candle_time = None
-
-
-# =========================================================
-# GMAIL
-# =========================================================
-
-def send_email_notification(subject, message_body):
-
-    try:
-
-        if not GMAIL_APP_PASSWORD:
-            print("HATA: GMAIL_APP_PASSWORD tanımlanmamış.")
-            return False
-
-        msg = MIMEMultipart()
-
-        msg["From"] = GMAIL_USER
-        msg["To"] = GMAIL_USER
-        msg["Subject"] = subject
-
-        msg.attach(
-            MIMEText(
-                message_body,
-                "plain",
-                "utf-8"
-            )
-        )
-
-        server = smtplib.SMTP(
-            "smtp.gmail.com",
-            587,
-            timeout=20
-        )
-
-        server.starttls()
-
-        server.login(
-            GMAIL_USER,
-            GMAIL_APP_PASSWORD
-        )
-
-        server.sendmail(
-            GMAIL_USER,
-            GMAIL_USER,
-            msg.as_string()
-        )
-
-        server.quit()
-
-        print("Gmail bildirimi gönderildi.")
-        return True
-
-    except Exception as e:
-
-        print("Gmail gönderim hatası:", e)
-        return False
-
-
-# =========================================================
-# MT5 BAĞLANTISI
-# =========================================================
-
-def connect_mt5():
-
-    print("MT5 bağlantısı başlatılıyor...")
-
-    if not mt5.initialize():
-
-        print(
-            "MT5 initialize hatası:",
-            mt5.last_error()
-        )
-
-        return False
-
-    try:
-
-        login = int(XM_LOGIN)
-
-    except:
-
-        print("HATA: XM_LOGIN geçerli değil.")
-        return False
-
-    authorized = mt5.login(
-        login=login,
-        password=XM_PASSWORD,
-        server=XM_SERVER
-    )
-
-    if not authorized:
-
-        print(
-            "XM MT5 giriş başarısız:",
-            mt5.last_error()
-        )
-
-        return False
-
-    print("================================")
-    print("XM MT5 BAĞLANTISI BAŞARILI")
-    print("================================")
-
-    print("Hesap:", login)
-    print("Server:", XM_SERVER)
-
-    return True
-
-
-# =========================================================
-# XAUUSD VERİSİ
-# =========================================================
 
 def get_market_data():
-
-    rates = mt5.copy_rates_from_pos(
-        SYMBOL,
-        TIMEFRAME,
-        0,
-        250
+    url = (
+        "https://query1.finance.yahoo.com/v8/finance/chart/"
+        + SYMBOL
+        + "?interval=15m&range=5d"
     )
 
-    if rates is None:
-
-        print(
-            "XAUUSD verisi alınamadı:",
-            mt5.last_error()
-        )
-
-        return None
-
-    if len(rates) < 60:
-
-        print("Yeterli mum verisi yok.")
-        return None
-
-    df = pd.DataFrame(rates)
-
-    df["time"] = pd.to_datetime(
-        df["time"],
-        unit="s"
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0"}
     )
+
+    with urllib.request.urlopen(req, timeout=20) as response:
+        data = json.loads(response.read().decode())
+
+    result = data["chart"]["result"][0]
+    timestamps = result["timestamp"]
+    quote = result["indicators"]["quote"][0]
+
+    df = pd.DataFrame({
+        "time": pd.to_datetime(timestamps, unit="s", utc=True),
+        "open": quote["open"],
+        "high": quote["high"],
+        "low": quote["low"],
+        "close": quote["close"]
+    })
+
+    df = df.dropna().reset_index(drop=True)
+
+    if len(df) < 60:
+        raise ValueError("Yeterli piyasa verisi yok.")
 
     return df
 
 
-# =========================================================
-# İNDİKATÖRLER
-# =========================================================
-
 def calculate_indicators(df):
+    df["ema20"] = df["close"].ewm(
+        span=20, adjust=False
+    ).mean()
 
-    # EMA 20
-    df["ema20"] = (
-        df["close"]
-        .ewm(
-            span=20,
-            adjust=False
-        )
-        .mean()
-    )
-
-    # EMA 50
-    df["ema50"] = (
-        df["close"]
-        .ewm(
-            span=50,
-            adjust=False
-        )
-        .mean()
-    )
-
-    # -----------------------------------------------------
-    # RSI 14
-    # -----------------------------------------------------
+    df["ema50"] = df["close"].ewm(
+        span=50, adjust=False
+    ).mean()
 
     delta = df["close"].diff()
 
-    gain = delta.where(
-        delta > 0,
-        0
-    )
-
-    loss = -delta.where(
-        delta < 0,
-        0
-    )
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
 
     avg_gain = gain.rolling(14).mean()
     avg_loss = loss.rolling(14).mean()
 
-    rs = avg_gain / avg_loss
+    rs = avg_gain / avg_loss.replace(0, float("nan"))
 
-    df["rsi"] = (
-        100 -
-        (100 / (1 + rs))
-    )
+    df["rsi"] = 100 - (100 / (1 + rs))
 
-    # -----------------------------------------------------
-    # ATR 14
-    # -----------------------------------------------------
+    high_low = df["high"] - df["low"]
+    high_close = (df["high"] - df["close"].shift()).abs()
+    low_close = (df["low"] - df["close"].shift()).abs()
 
-    high_low = (
-        df["high"] -
-        df["low"]
-    )
-
-    high_close = (
-        df["high"] -
-        df["close"].shift()
-    ).abs()
-
-    low_close = (
-        df["low"] -
-        df["close"].shift()
-    ).abs()
-
-    true_range = pd.concat(
-        [
-            high_low,
-            high_close,
-            low_close
-        ],
+    tr = pd.concat(
+        [high_low, high_close, low_close],
         axis=1
     ).max(axis=1)
 
-    df["atr"] = (
-        true_range
-        .rolling(14)
-        .mean()
-    )
+    df["atr"] = tr.rolling(14).mean()
 
     return df
 
 
-# =========================================================
-# SİNYAL ÜRETİMİ
-# =========================================================
+def send_email(subject, body):
+    if not GMAIL_APP_PASSWORD:
+        raise ValueError("GMAIL_APP_PASSWORD eksik.")
 
-def generate_signal(df):
+    msg = MIMEMultipart()
+    msg["From"] = GMAIL_USER
+    msg["To"] = GMAIL_USER
+    msg["Subject"] = subject
 
-    # Son KAPANMIŞ mum
-    candle = df.iloc[-2]
+    msg.attach(MIMEText(body, "plain", "utf-8"))
 
-    price = float(candle["close"])
-
-    ema20 = float(candle["ema20"])
-    ema50 = float(candle["ema50"])
-
-    rsi = float(candle["rsi"])
-
-    atr = float(candle["atr"])
-
-    candle_time = candle["time"]
-
-    # Eksik veri kontrolü
-    if (
-        pd.isna(ema20)
-        or pd.isna(ema50)
-        or pd.isna(rsi)
-        or pd.isna(atr)
-    ):
-        return None
-
-    # =====================================================
-    # BUY
-    # =====================================================
-
-    if (
-        ema20 > ema50
-        and 50 <= rsi <= 70
-    ):
-
-        stop_loss = (
-            price -
-            (atr * 1.5)
-        )
-
-        take_profit = (
-            price +
-            (atr * 3.0)
-        )
-
-        return {
-            "type": "BUY",
-            "price": price,
-            "sl": stop_loss,
-            "tp": take_profit,
-            "rsi": rsi,
-            "atr": atr,
-            "time": candle_time
-        }
-
-    # =====================================================
-    # SELL
-    # =====================================================
-
-    if (
-        ema20 < ema50
-        and 30 <= rsi <= 50
-    ):
-
-        stop_loss = (
-            price +
-            (atr * 1.5)
-        )
-
-        take_profit = (
-            price -
-            (atr * 3.0)
-        )
-
-        return {
-            "type": "SELL",
-            "price": price,
-            "sl": stop_loss,
-            "tp": take_profit,
-            "rsi": rsi,
-            "atr": atr,
-            "time": candle_time
-        }
-
-    return None
+    with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
+        server.starttls()
+        server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+        server.sendmail(GMAIL_USER, GMAIL_USER, msg.as_string())
 
 
-# =========================================================
-# SİNYAL MESAJI
-# =========================================================
-
-def create_signal_message(signal):
-
-    if signal["type"] == "BUY":
-        emoji = "🟢"
-    else:
-        emoji = "🔴"
-
-    message = f"""
-{emoji} XAUUSD BOT SİNYALİ
-
-================================
-
-SİNYAL: {signal["type"]}
-
-Fiyat:
-{signal["price"]:.2f}
-
-Stop Loss:
-{signal["sl"]:.2f}
-
-Take Profit:
-{signal["tp"]:.2f}
-
-RSI:
-{signal["rsi"]:.2f}
-
-ATR:
-{signal["atr"]:.2f}
-
-Mum:
-{signal["time"]}
-
-Zaman Dilimi:
-15 Dakika
-
-Risk Yönetimi:
-1 : 2
-
-================================
-
-OTOMATİK İŞLEM:
-KAPALI
-
-Bu bildirim yalnızca sinyaldir.
-"""
-
-    return message
+def read_state():
+    try:
+        with open(STATE_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"last_processed": ""}
 
 
-# =========================================================
-# ANA BOT
-# =========================================================
+def save_state(candle_time):
+    with open(STATE_FILE, "w") as f:
+        json.dump({"last_processed": candle_time}, f)
+
 
 def run_bot():
+    print("XAUUSD sinyal botu başlatıldı.")
 
-    global last_signal
-    global last_candle_time
+    df = get_market_data()
+    df = calculate_indicators(df)
 
-    if not connect_mt5():
+    # Son mum henüz tamamlanmamış olabilir.
+    candle = df.iloc[-2]
 
-        print("MT5 bağlantısı kurulamadı.")
+    candle_time = candle["time"].isoformat()
+
+    state = read_state()
+
+    if state.get("last_processed") == candle_time:
+        print("Bu mum daha önce kontrol edildi.")
         return
 
-    print("")
-    print("================================")
-    print("XAUUSD BOT AKTİF")
-    print("Sembol:", SYMBOL)
-    print("Zaman Dilimi: M15")
-    print("Otomatik işlem: KAPALI")
-    print("================================")
-    print("")
+    price = float(candle["close"])
+    ema20 = float(candle["ema20"])
+    ema50 = float(candle["ema50"])
+    rsi = float(candle["rsi"])
+    atr = float(candle["atr"])
 
-    while True:
+    if pd.isna(rsi) or pd.isna(atr):
+        raise ValueError("İndikatör verisi eksik.")
 
-        try:
+    signal = None
 
-            df = get_market_data()
+    if ema20 > ema50 and 50 <= rsi <= 70:
+        signal = "BUY"
+        sl = price - atr * 1.5
+        tp = price + atr * 3
 
-            if df is None:
+    elif ema20 < ema50 and 30 <= rsi <= 50:
+        signal = "SELL"
+        sl = price + atr * 1.5
+        tp = price - atr * 3
 
-                time.sleep(30)
-                continue
+    if signal:
+        message = f"""
+XAUUSD ALTIN SİNYALİ
 
-            df = calculate_indicators(df)
+Sinyal: {signal}
 
-            # Son kapanmış mum
-            candle_time = df.iloc[-2]["time"]
+Veri kaynağı: Yahoo Finance GC=F
+Zaman dilimi: 15 dakika
 
-            # Aynı mumu tekrar işlememek
-            if candle_time != last_candle_time:
+Fiyat: {price:.2f}
+Stop Loss: {sl:.2f}
+Take Profit: {tp:.2f}
 
-                last_candle_time = candle_time
+EMA20: {ema20:.2f}
+EMA50: {ema50:.2f}
+RSI: {rsi:.2f}
+ATR: {atr:.2f}
 
-                signal = generate_signal(df)
+Mum zamanı: {candle_time}
 
-                if signal:
+Otomatik işlem: KAPALI
 
-                    signal_type = signal["type"]
+Bu bir teknik analiz sinyalidir.
+XM XAUUSD fiyatıyla birebir aynı olmayabilir.
+"""
 
-                    # Aynı yöndeki sinyali tekrar gönderme
-                    if signal_type != last_signal:
+        send_email("XAUUSD " + signal + " SİNYALİ", message)
+        print(message)
 
-                        message = create_signal_message(
-                            signal
-                        )
+    else:
+        print("WAIT - İşlem sinyali yok.")
 
-                        subject = (
-                            f"XAUUSD {signal_type} Sinyali"
-                        )
+    save_state(candle_time)
 
-                        print(message)
-
-                        send_email_notification(
-                            subject,
-                            message
-                        )
-
-                        last_signal = signal_type
-
-                    else:
-
-                        print(
-                            candle_time,
-                            "- Aynı sinyal zaten gönderildi:",
-                            signal_type
-                        )
-
-                else:
-
-                    print(
-                        candle_time,
-                        "- WAIT"
-                    )
-
-            time.sleep(20)
-
-        except Exception as e:
-
-            print(
-                "BOT HATASI:",
-                e
-            )
-
-            time.sleep(30)
-
-
-# =========================================================
-# PROGRAMI BAŞLAT
-# =========================================================
 
 if __name__ == "__main__":
-
     run_bot()
