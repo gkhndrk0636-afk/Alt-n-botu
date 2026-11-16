@@ -9,7 +9,7 @@ import json
 GMAIL_USER = "gkhndrk0636@gmail.com"
 GMAIL_APP_PASSWORD = "fqjk iycr ytvr zfgf"
 
-app = Flask('')
+app = Flask(__name__)
 last_signal_type = None
 
 def send_email_notification(subject, message_body):
@@ -54,7 +54,6 @@ def home():
                 return "OK - Piyasa verisi toplanıyor...", 200
                 
             current_price = prices[-1]
-            
             return f"OK - Sistem Aktif | Fiyat: {current_price:.2f}", 200
 
     except Exception as e:
