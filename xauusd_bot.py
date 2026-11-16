@@ -31,16 +31,18 @@ def get_market_data():
     with urllib.request.urlopen(req, timeout=20) as response:
         data = json.loads(response.read().decode())
 
-    result = data["chart"]["result"][0]
-    timestamps = result["timestamp"]
-    quote = result["indicators"]["quote"][0]
+    chart_result = data.get("chart").get("result")
+    result = chart_result.pop(0)
+    timestamps = result.get("timestamp")
+    quote_list = result.get("indicators").get("quote")
+    quote = quote_list.pop(0)
 
     df = pd.DataFrame({
         "time": pd.to_datetime(timestamps, unit="s", utc=True),
-        "open": quote["open"],
-        "high": quote["high"],
-        "low": quote["low"],
-        "close": quote["close"]
+        "open": quote.get("open"),
+        "high": quote.get("high"),
+        "low": quote.get("low"),
+        "close": quote.get("close")
     })
 
     df = df.dropna().reset_index(drop=True)
