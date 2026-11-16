@@ -2,7 +2,6 @@ import os
 import json
 import urllib.request
 import smtplib
-import traceback
 import pandas as pd
 
 from email.mime.text import MIMEText
@@ -10,7 +9,6 @@ from email.mime.multipart import MIMEMultipart
 
 GMAIL_USER = "gkhndrk0636@gmail.com"
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
-TEST_MODE = os.getenv("TEST_MODE", "false").lower() == "true"
 
 SYMBOL = "GC=F"
 STATE_FILE = "state.json"
@@ -31,47 +29,56 @@ def get_market_data():
     with urllib.request.urlopen(req, timeout=20) as response:
         data = json.loads(response.read().decode())
 
-    chart_result = data.get("chart").get("result")
-    result = chart_result.pop(0)
-    timestamps = result.get("timestamp")
-    quote_list = result.get("indicators").get("quote")
-    quote = quote_list.pop(0)
+    result = data["chart"]["result"][0]
+    timestamps = result["timestamp"]
+    quote = result["indicators"]["quote"][0]
 
     df = pd.DataFrame({
         "time": pd.to_datetime(timestamps, unit="s", utc=True),
-        "open": quote.get("open"),
-        "high": quote.get("high"),
-        "low": quote.get("low"),
-        "close": quote.get("close")
+        "open": quote["open"],
+        "high": quote["high"],
+        "low": quote["low"],
+        "close": quote["close"]
     })
 
     df = df.dropna().reset_index(drop=True)
 
-    if len(df) < 205:
+    if len(df) < 60:
         raise ValueError("Yeterli piyasa verisi yok.")
 
     return df
 
 
 def calculate_indicators(df):
-    df["ema20"] = df["close"].ewm(span=20, adjust=False).mean()
-    df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
-    df["ema200"] = df["close"].ewm(span=200, adjust=False).mean()
+    df["ema20"] = df["close"].ewm(
+        span=20, adjust=False
+    ).mean()
+
+    df["ema50"] = df["close"].ewm(
+        span=50, adjust=False
+    ).mean()
 
     delta = df["close"].diff()
+
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
 
     avg_gain = gain.rolling(14).mean()
     avg_loss = loss.rolling(14).mean()
+
     rs = avg_gain / avg_loss.replace(0, float("nan"))
+
     df["rsi"] = 100 - (100 / (1 + rs))
 
     high_low = df["high"] - df["low"]
     high_close = (df["high"] - df["close"].shift()).abs()
     low_close = (df["low"] - df["close"].shift()).abs()
 
-    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    tr = pd.concat(
+        [high_low, high_close, low_close],
+        axis=1
+    ).max(axis=1)
+
     df["atr"] = tr.rolling(14).mean()
 
     return df
@@ -79,7 +86,7 @@ def calculate_indicators(df):
 
 def send_email(subject, body):
     if not GMAIL_APP_PASSWORD:
-        raise ValueError("GMAIL_APP_PASSWORD eksik! GitHub Secrets ayarını kontrol edin.")
+        raise ValueError("GMAIL_APP_PASSWORD eksik.")
 
     msg = MIMEMultipart()
     msg["From"] = GMAIL_USER
@@ -97,21 +104,14 @@ def send_email(subject, body):
 def read_state():
     try:
         with open(STATE_FILE, "r") as f:
-            data = json.load(f)
-            return {
-                "last_processed": data.get("last_processed", ""),
-                "last_signal": data.get("last_signal", "NONE")
-            }
+            return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        return {"last_processed": "", "last_signal": "NONE"}
+        return {"last_processed": ""}
 
 
-def save_state(candle_time, last_signal):
+def save_state(candle_time):
     with open(STATE_FILE, "w") as f:
-        json.dump({
-            "last_processed": candle_time,
-            "last_signal": last_signal
-        }, f, indent=2)
+        json.dump({"last_processed": candle_time}, f)
 
 
 def run_bot():
@@ -120,71 +120,44 @@ def run_bot():
     df = get_market_data()
     df = calculate_indicators(df)
 
-    closed_candles = df.iloc[:-1].copy()
+    # Son mum henüz tamamlanmamış olabilir.
+    candle = df.iloc[-2]
 
-    if TEST_MODE:
-        latest = closed_candles.iloc[-1]
-        test_msg = f"""
-XAUUSD BOT TEST BİLDİRİMİ
-
-Bot başarıyla çalıştı ve EMA200 korumalı veri çekildi.
-Son Kapanan Fiyat: {float(latest['close']):.2f}
-EMA20: {float(latest['ema20']):.2f} | EMA50: {float(latest['ema50']):.2f}
-EMA200 (Ana Trend): {float(latest['ema200']):.2f}
-RSI: {float(latest['rsi']):.2f} | ATR: {float(latest['atr']):.2f}
-Mum Zamanı (UTC): {latest['time'].isoformat()}
-"""
-        send_email("XAUUSD Bot - Test Başarılı", test_msg)
-        print("Test e-postası gönderildi.")
-        return
+    candle_time = candle["time"].isoformat()
 
     state = read_state()
-    last_processed = state["last_processed"]
-    last_signal = state["last_signal"]
 
-    if not last_processed:
-        candles_to_check = closed_candles.iloc[-1:]
-    else:
-        candles_to_check = closed_candles[
-            closed_candles["time"].apply(lambda x: x.isoformat() > last_processed)
-        ]
-
-    if candles_to_check.empty:
-        print("Yeni kapanmış mum yok. Beklemede.")
+    if state.get("last_processed") == candle_time:
+        print("Bu mum daha önce kontrol edildi.")
         return
 
-    latest_time = last_processed
+    price = float(candle["close"])
+    ema20 = float(candle["ema20"])
+    ema50 = float(candle["ema50"])
+    rsi = float(candle["rsi"])
+    atr = float(candle["atr"])
 
-    for _, candle in candles_to_check.iterrows():
-        candle_time = candle["time"].isoformat()
-        latest_time = candle_time
+    if pd.isna(rsi) or pd.isna(atr):
+        raise ValueError("İndikatör verisi eksik.")
 
-        price = float(candle["close"])
-        ema20 = float(candle["ema20"])
-        ema50 = float(candle["ema50"])
-        ema200 = float(candle["ema200"])
-        rsi = float(candle["rsi"])
-        atr = float(candle["atr"])
+    signal = None
 
-        if pd.isna(rsi) or pd.isna(atr):
-            continue
+    if ema20 > ema50 and 50 <= rsi <= 70:
+        signal = "BUY"
+        sl = price - atr * 1.5
+        tp = price + atr * 3
 
-        signal = None
+    elif ema20 < ema50 and 30 <= rsi <= 50:
+        signal = "SELL"
+        sl = price + atr * 1.5
+        tp = price - atr * 3
 
-        if ema20 > ema50 and price > ema200 and 50 <= rsi <= 70:
-            signal = "BUY"
-            sl = price - atr * 1.5
-            tp = price + atr * 3
-        elif ema20 < ema50 and price < ema200 and 30 <= rsi <= 50:
-            signal = "SELL"
-            sl = price + atr * 1.5
-            tp = price - atr * 3
-
-        if signal and signal != last_signal:
-            message = f"""
+    if signal:
+        message = f"""
 XAUUSD ALTIN SİNYALİ
 
 Sinyal: {signal}
+
 Veri kaynağı: Yahoo Finance GC=F
 Zaman dilimi: 15 dakika
 
@@ -194,33 +167,25 @@ Take Profit: {tp:.2f}
 
 EMA20: {ema20:.2f}
 EMA50: {ema50:.2f}
-EMA200: {ema200:.2f}
 RSI: {rsi:.2f}
 ATR: {atr:.2f}
 
-Mum zamanı (UTC): {candle_time}
-Otomatik işlem: KAPALI
-"""
-            send_email(f"XAUUSD {signal} SİNYALİ ({price:.2f})", message)
-            print(f"{candle_time} için {signal} sinyali gönderildi.")
-            last_signal = signal
-        elif signal == last_signal:
-            print(f"{candle_time} -> {signal} devam ediyor (tekrar mail atılmadı).")
-        else:
-            print(f"{candle_time} -> WAIT (Fiyat: {price:.2f}, EMA200: {ema200:.2f}, RSI: {rsi:.2f})")
-            last_signal = "NONE"
+Mum zamanı: {candle_time}
 
-    save_state(latest_time, last_signal)
+Otomatik işlem: KAPALI
+
+Bu bir teknik analiz sinyalidir.
+XM XAUUSD fiyatıyla birebir aynı olmayabilir.
+"""
+
+        send_email("XAUUSD " + signal + " SİNYALİ", message)
+        print(message)
+
+    else:
+        print("WAIT - İşlem sinyali yok.")
+
+    save_state(candle_time)
 
 
 if __name__ == "__main__":
-    try:
-        run_bot()
-    except Exception as e:
-        error_details = traceback.format_exc()
-        print("HATA OLUŞTU:\n", error_details)
-        try:
-            send_email("XAUUSD Bot Hata Bildirimi", f"Bot çalışırken hata oluştu:\n\n{error_details}")
-        except Exception:
-            pass
-        raise
+    run_bot()
