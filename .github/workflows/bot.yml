@@ -2,9 +2,9 @@ name: XAUUSD Altin Botu
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "7,22,37,52 * * * *"
-
+     schedule:
+      - cron: "*/15 * * * *"
+ 
 permissions:
   contents: write
 
