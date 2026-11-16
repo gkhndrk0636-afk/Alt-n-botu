@@ -2,10 +2,15 @@ name: XAUUSD Altin Botu
 
 on:
   workflow_dispatch:
+    inputs:
+      test_mode:
+        description: "Sinyal beklemeden test e-postası gönder"
+        required: true
+        default: false
+        type: boolean
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/15 * * * 1-5"
 
- 
 permissions:
   contents: write
 
@@ -28,12 +33,12 @@ jobs:
       - name: Altin botunu calistir
         env:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          TEST_MODE: ${{ github.event.inputs.test_mode || 'false' }}
         run: python xauusd_bot.py
 
       - name: Sinyal kaydini sakla
         run: |
           git config user.name "XAUUSD Bot"
-          git config user.email "bot@users.noreply.github.com"
+          git config user.email "bot@://github.com"
           git add state.json
-          git diff --cached --quiet || git commit -m "Bot sinyal kaydi"
-          git push
+          git diff --cached --quiet || (git commit -m "Update state.json" && git push)
