@@ -1,6 +1,4 @@
 import os
-import time
-import threading
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -33,29 +31,27 @@ def send_email_notification(subject, message_body):
         print(f"E-posta Gönderme Hatası: {e}")
         return f"Hata: {e}"
 
-def analyze_xauusd_market():
+@app.route('/')
+def home():
     try:
         # Verileri çekiyoruz
         data_1h = yf.download("GC=F", interval="1h", period="5d", progress=False)
         data_15m = yf.download("GC=F", interval="15m", period="2d", progress=False)
         
         if data_1h.empty or data_15m.empty:
-            return "Piyasa verisi alınamadı."
+            return "Piyasa verisi alınamadı.", 200
             
-        # Çok katmanlı başlık (MultiIndex) sorununu önlemek için düzeltme
         if isinstance(data_1h.columns, pd.MultiIndex):
             data_1h.columns = data_1h.columns.get_level_values(0)
         if isinstance(data_15m.columns, pd.MultiIndex):
             data_15m.columns = data_15m.columns.get_level_values(0)
         
-        # EMA9 ve EMA21 Hesaplamaları
         data_1h['EMA9'] = data_1h['Close'].ewm(span=9, adjust=False).mean()
         data_1h['EMA21'] = data_1h['Close'].ewm(span=21, adjust=False).mean()
         
         data_15m['EMA9'] = data_15m['Close'].ewm(span=9, adjust=False).mean()
         data_15m['EMA21'] = data_15m['Close'].ewm(span=21, adjust=False).mean()
         
-        # Series hatasını önlemek için değerleri güvenli şekilde float'a çeviriyoruz
         c_price = float(data_15m['Close'].iloc[-1].iloc[0] if isinstance(data_15m['Close'].iloc[-1], pd.Series) else data_15m['Close'].iloc[-1])
         p1_e9 = float(data_15m['EMA9'].iloc[-2].iloc[0] if isinstance(data_15m['EMA9'].iloc[-2], pd.Series) else data_15m['EMA9'].iloc[-2])
         p1_e21 = float(data_15m['EMA21'].iloc[-2].iloc[0] if isinstance(data_15m['EMA21'].iloc[-2], pd.Series) else data_15m['EMA21'].iloc[-2])
@@ -67,7 +63,6 @@ def analyze_xauusd_market():
         
         signal = None
         
-        # AL (BUY) Kesişimi + Risk Yönetimi
         if p1_e9 <= p1_e21 and c_e9 > c_e21:
             stop_loss = c_price - 3.50
             take_profit = c_price + 7.00
@@ -83,7 +78,6 @@ def analyze_xauusd_market():
                 f"⚡ *Strateji: EMA Kesişimi & Risk/Ödül 1:2*"
             )
             
-        # SAT (SELL) Kesişimi + Risk Yönetimi
         elif p1_e9 >= p1_e21 and c_e9 < c_e21:
             stop_loss = c_price + 3.50
             take_profit = c_price - 7.00
@@ -101,30 +95,13 @@ def analyze_xauusd_market():
             
         if signal:
             send_email_notification("🚨 XAUUSD Profesyonel Sinyal & Risk Raporu", signal)
-            print("Sinyal Üretildi ve Gönderildi.")
+            return f"OK - Sinyal Gonderildi | Fiyat: {c_price:.2f}", 200
         else:
-            print(f"Piyasa taranıyor... Güncel Fiyat: {c_price:.2f} | 1 Saatlik Trend: {trend_1h}")
+            return f"OK - Piyasa Taranıyor | Fiyat: {c_price:.2f}", 200
             
     except Exception as e:
-        print(f"Analiz Motoru Hatası: {e}")
-
-# Arka planda sürekli çalışacak döngü (Her 15 dakikada bir tarama yapar)
-def background_trader():
-    while True:
-        print("Arka plan taraması başlatılıyor...")
-        analyze_xauusd_market()
-        # 15 dakika = 900 saniye
-        time.sleep(900)
-
-@app.route('/')
-def home():
-    return "OK - Bot Arka Planda Çalışıyor", 200
+        return f"Hata: {e}", 200
 
 if __name__ == "__main__":
-    # Arka plan iş parçacığını (thread) başlatıyoruz
-    t = threading.Thread(target=background_trader)
-    t.daemon = True
-    t.start()
-    
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
