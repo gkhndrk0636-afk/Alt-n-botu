@@ -169,12 +169,10 @@ Mum Zamanı (UTC): {latest['time'].isoformat()}
 
         signal = None
 
-        # BUY: Kısa trend yukarı (EMA20 > EMA50) + Ana trend yukarı (Fiyat > EMA200) + RSI uygun
         if ema20 > ema50 and price > ema200 and 50 <= rsi <= 70:
             signal = "BUY"
             sl = price - atr * 1.5
             tp = price + atr * 3
-        # SELL: Kısa trend aşağı (EMA20 < EMA50) + Ana trend aşağı (Fiyat < EMA200) + RSI uygun
         elif ema20 < ema50 and price < ema200 and 30 <= rsi <= 50:
             signal = "SELL"
             sl = price + atr * 1.5
