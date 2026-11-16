@@ -1,191 +1,112 @@
 import os
 import json
-import urllib.request
 import smtplib
-import pandas as pd
-
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import pandas as pd
+import yfinance as yf
 
-GMAIL_USER = "gkhndrk0636@gmail.com"
-GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
-
-SYMBOL = "GC=F"
+# Dosya yolları
 STATE_FILE = "state.json"
 
-
 def get_market_data():
-    url = (
-        "https://yahoo.com"
-        + SYMBOL
-        + "?interval=15m&range=5d"
-    )
-
-    req = urllib.request.Request(
-        url,
-        headers={"User-Agent": "Mozilla/5.0"}
-    )
-
-    with urllib.request.urlopen(req, timeout=20) as response:
-        data = json.loads(response.read().decode())
-
-    result = data["chart"]["result"][0]
-    timestamps = result["timestamp"]
-    quote = result["indicators"]["quote"][0]
-
-    df = pd.DataFrame({
-        "time": pd.to_datetime(timestamps, unit="s", utc=True),
-        "open": quote["open"],
-        "high": quote["high"],
-        "low": quote["low"],
-        "close": quote["close"]
-    })
-
-    df = df.dropna().reset_index(drop=True)
-
-    if len(df) < 60:
-        raise ValueError("Yeterli piyasa verisi yok.")
-
+    """Yahoo Finance üzerinden XAUUSD (Altın) verilerini çeker."""
+    # 5 dakikalık periyotlar için uygun veri çekme (örneğin son 5 gün)
+    df = yf.download("GC=F", period="5d", interval="5m", progress=False)
+    if df.empty:
+        # Alternatif sembol denemesi
+        df = yf.download("XAU=X", period="5d", interval="5m", progress=False)
+    
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+        
     return df
-
 
 def calculate_indicators(df):
-    df["ema20"] = df["close"].ewm(
-        span=20, adjust=False
-    ).mean()
-
-    df["ema50"] = df["close"].ewm(
-        span=50, adjust=False
-    ).mean()
-
-    delta = df["close"].diff()
-
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-
-    avg_gain = gain.rolling(14).mean()
-    avg_loss = loss.rolling(14).mean()
-
-    rs = avg_gain / avg_loss.replace(0, float("nan"))
-
-    df["rsi"] = 100 - (100 / (1 + rs))
-
-    high_low = df["high"] - df["low"]
-    high_close = (df["high"] - df["close"].shift()).abs()
-    low_close = (df["low"] - df["close"].shift()).abs()
-
-    tr = pd.concat(
-        [high_low, high_close, low_close],
-        axis=1
-    ).max(axis=1)
-
-    df["atr"] = tr.rolling(14).mean()
-
+    """Basit teknik indikatörleri (EMA vb.) hesaplar."""
+    df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
+    df['EMA21'] = df['Close'].ewm(span=21, adjust=False).mean()
     return df
 
+def check_signals(df):
+    """Son duruma göre BUY, SELL veya NEUTRAL sinyali üretir."""
+    if len(df) < 2:
+        return "NEUTRAL"
+    
+    latest = df.iloc[-1]
+    prev = df.iloc[-2]
+    
+    # Basit EMA Kesişim Stratejisi
+    if latest['EMA9'] > latest['EMA21'] and prev['EMA9'] <= prev['EMA21']:
+        return "BUY"
+    elif latest['EMA9'] < latest['EMA21'] and prev['EMA9'] >= prev['EMA21']:
+        return "SELL"
+    
+    return "NEUTRAL"
 
-def send_email(subject, body):
-    if not GMAIL_APP_PASSWORD:
-        raise ValueError("GMAIL_APP_PASSWORD eksik.")
-
-    msg = MIMEMultipart()
-    msg["From"] = GMAIL_USER
-    msg["To"] = GMAIL_USER
-    msg["Subject"] = subject
-
-    msg.attach(MIMEText(body, "plain", "utf-8"))
-
-    with smtplib.SMTP("://gmail.com", 587, timeout=20) as server:
-        server.starttls()
-        server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
-        server.sendmail(GMAIL_USER, GMAIL_USER, msg.as_string())
-
-
-def read_state():
-    try:
-        with open(STATE_FILE, "r") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {"last_processed": ""}
-
-
-def save_state(candle_time):
-    with open(STATE_FILE, "w") as f:
-        json.dump({"last_processed": candle_time}, f)
-
-
-def run_bot():
-    print("XAUUSD sinyal botu başlatıldı.")
-
-    df = get_market_data()
-    df = calculate_indicators(df)
-
-    # Son mum henüz tamamlanmamış olabilir.
-    candle = df.iloc[-2]
-
-    candle_time = candle["time"].isoformat()
-
-    state = read_state()
-
-    if state.get("last_processed") == candle_time:
-        print("Bu mum daha önce kontrol edildi.")
+def send_email_alert(signal, price):
+    """Gmail üzerinden sinyal değiştiğinde e-posta gönderir."""
+    sender_email = os.environ.get("GMAIL_USER", "gkhndrk0636@gmail.com") # Kendi mail adresin
+    app_password = os.environ.get("GMAIL_APP_PASSWORD")
+    
+    if not app_password:
+        print("Gmail uygulama şifresi bulunamadı!")
         return
 
-    price = float(candle["close"])
-    ema20 = float(candle["ema20"])
-    ema50 = float(candle["ema50"])
-    rsi = float(candle["rsi"])
-    atr = float(candle["atr"])
+    receiver_email = sender_email
+    
+    message = MIMEMultipart("alternative")
+    message["Subject"] = f"🚨 XAUUSD Sinyal Değişti: {signal} (Fiyat: {price})"
+    message["From"] = sender_email
+    message["To"] = receiver_email
+    
+    text = f"XAUUSD Altın Botu yeni bir sinyal üretti!\n\nYön: {signal}\nFiyat: {price}"
+    part = MIMEText(text, "plain")
+    message.attach(part)
+    
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(sender_email, app_password)
+            server.sendmail(sender_email, receiver_email, message.as_string())
+        print(f"E-posta başarıyla gönderildi: {signal}")
+    except Exception as e:
+        print(f"E-posta gönderilirken hata oluştu: {e}")
 
-    if pd.isna(rsi) or pd.isna(atr):
-        raise ValueError("İndikatör verisi eksik.")
+def load_state():
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                return json.load(f)
+        except:
+            pass
+    return {"last_signal": "NEUTRAL"}
 
-    signal = None
+def save_state(signal):
+    with open(STATE_FILE, "w") as f:
+        json.dump({"last_signal": signal}, f)
 
-    if ema20 > ema50 and 50 <= rsi <= 70:
-        signal = "BUY"
-        sl = price - atr * 1.5
-        tp = price + atr * 3
-
-    elif ema20 < ema50 and 30 <= rsi <= 50:
-        signal = "SELL"
-        sl = price + atr * 1.5
-        tp = price - atr * 3
-
-    if signal:
-        message = f"""
-XAUUSD ALTIN SİNYALİ
-
-Sinyal: {signal}
-
-Veri kaynağı: Yahoo Finance GC=F
-Zaman dilimi: 15 dakika
-
-Fiyat: {price:.2f}
-Stop Loss: {sl:.2f}
-Take Profit: {tp:.2f}
-
-EMA20: {ema20:.2f}
-EMA50: {ema50:.2f}
-RSI: {rsi:.2f}
-ATR: {atr:.2f}
-
-Mum zamanı: {candle_time}
-
-Otomatik işlem: KAPALI
-
-Bu bir teknik analiz sinyalidir.
-XM XAUUSD fiyatıyla birebir aynı olmayabilir.
-"""
-
-        send_email("XAUUSD " + signal + " SİNYALİ", message)
-        print(message)
-
+def main():
+    print("XAUUSD Bot çalıştırılıyor...")
+    df = get_market_data()
+    if df.empty:
+        print("Veri alınamadı.")
+        return
+        
+    df = calculate_indicators(df)
+    current_signal = check_signals(df)
+    latest_price = float(df['Close'].iloc[-1])
+    
+    print(flive_price := f"Güncel Fiyat: {latest_price}, Sinyal: {current_signal}")
+    
+    state = load_state()
+    last_signal = state.get("last_signal", "NEUTRAL")
+    
+    # Sadece sinyal değiştiğinde mail at
+    if current_signal != "NEUTRAL" and current_signal != last_signal:
+        send_email_alert(current_signal, latest_price)
+        save_state(current_signal)
     else:
-        print("WAIT - İşlem sinyali yok.")
-
-    save_state(candle_time)
-
+        print(f"Sinyal değişmedi (Mevcut: {current_signal}, Önceki: {last_signal}). Mail gönderilmedi.")
 
 if __name__ == "__main__":
-    run_bot()
+    main()
