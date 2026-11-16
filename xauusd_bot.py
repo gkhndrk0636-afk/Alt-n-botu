@@ -11,10 +11,8 @@ STATE_FILE = "state.json"
 
 def get_market_data():
     """Yahoo Finance üzerinden XAUUSD (Altın) verilerini çeker."""
-    # 5 dakikalık periyotlar için uygun veri çekme (örneğin son 5 gün)
     df = yf.download("GC=F", period="5d", interval="5m", progress=False)
     if df.empty:
-        # Alternatif sembol denemesi
         df = yf.download("XAU=X", period="5d", interval="5m", progress=False)
     
     if isinstance(df.columns, pd.MultiIndex):
@@ -46,7 +44,7 @@ def check_signals(df):
 
 def send_email_alert(signal, price):
     """Gmail üzerinden sinyal değiştiğinde e-posta gönderir."""
-    sender_email = os.environ.get("GMAIL_USER", "gkhndrk0636@gmail.com") # Kendi mail adresin
+    sender_email = os.environ.get("GMAIL_USER", "gkhndrk0636@gmail.com")
     app_password = os.environ.get("GMAIL_APP_PASSWORD")
     
     if not app_password:
@@ -96,7 +94,7 @@ def main():
     current_signal = check_signals(df)
     latest_price = float(df['Close'].iloc[-1])
     
-    print(flive_price := f"Güncel Fiyat: {latest_price}, Sinyal: {current_signal}")
+    print(f"Güncel Fiyat: {latest_price}, Sinyal: {current_signal}")
     
     state = load_state()
     last_signal = state.get("last_signal", "NEUTRAL")
