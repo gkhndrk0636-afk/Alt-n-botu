@@ -2,14 +2,16 @@ name: XAUUSD Signal Bot
 
 on:
   schedule:
-    # Her 15 dakikada bir
     - cron: "*/15 * * * *"
-
-    # Her gün Türkiye saatiyle yaklaşık 23:00
-    # UTC 20:00
     - cron: "0 20 * * *"
-
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: xauusd-bot
+  cancel-in-progress: false
 
 jobs:
   run-bot:
@@ -36,3 +38,14 @@ jobs:
           DAILY_REPORT: ${{ github.event.schedule == '0 20 * * *' && '1' || '0' }}
         run: |
           python xauusd_bot.py
+
+      - name: Sinyal geçmişini kaydet
+        run: |
+          git config user.name "XAUUSD Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add state.json signals.json
+
+          git diff --cached --quiet || git commit -m "Update XAUUSD bot state"
+
+          git push
