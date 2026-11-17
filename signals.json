@@ -1,0 +1,28 @@
+[
+  {
+    "id": "20261117181417",
+    "time": "2026-11-17T18:00:00+00:00",
+    "direction": "SELL",
+    "score": 6,
+    "confidence": 65,
+    "strength": "ORTA",
+    "entry": 3866.9,
+    "sl": 3879.31,
+    "tp1": 3851.39,
+    "tp2": 3846.21,
+    "atr": 10.34,
+    "rsi": 47.83,
+    "ema20": 3868.45,
+    "ema50": 3867.79,
+    "ema200": 3876.57,
+    "reasons": [
+      "EMA20 düşüyor",
+      "RSI uygun (47.8)",
+      "Fiyat EMA20 altında",
+      "Mum boyutu normal",
+      "Volatilite uygun"
+    ],
+    "result": "OPEN",
+    "result_time": null
+  }
+]
