@@ -4,6 +4,7 @@ import urllib.request
 import smtplib
 import pandas as pd
 
+from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -20,7 +21,7 @@ SYMBOL = "GC=F"
 STATE_FILE = "state.json"
 SIGNALS_FILE = "signals.json"
 
-MAX_OPEN_SIGNALS = 20
+MAX_SIGNALS = 100
 
 
 # =========================
@@ -55,13 +56,11 @@ def get_market_data():
     quote = result["indicators"]["quote"][0]
 
     df = pd.DataFrame({
-
         "time": pd.to_datetime(
             timestamps,
             unit="s",
             utc=True
         ),
-
         "open": quote["open"],
         "high": quote["high"],
         "low": quote["low"],
@@ -191,7 +190,6 @@ def calculate_indicators(df):
 def send_email(subject, body):
 
     if not GMAIL_APP_PASSWORD:
-
         raise ValueError(
             "GMAIL_APP_PASSWORD eksik."
         )
@@ -251,11 +249,12 @@ def read_state():
     ):
 
         return {
-            "last_processed": ""
+            "last_processed": "",
+            "last_daily_report": ""
         }
 
 
-def save_state(candle_time):
+def save_state(state):
 
     with open(
         STATE_FILE,
@@ -263,16 +262,13 @@ def save_state(candle_time):
     ) as f:
 
         json.dump(
-            {
-                "last_processed":
-                candle_time
-            },
+            state,
             f
         )
 
 
 # =========================
-# SİNYALLERİ OKU
+# SİNYALLER
 # =========================
 
 def read_signals():
@@ -302,14 +298,14 @@ def save_signals(signals):
     ) as f:
 
         json.dump(
-            signals,
+            signals[-MAX_SIGNALS:],
             f,
             indent=2
         )
 
 
 # =========================
-# ESKİ SİNYALLERİ KONTROL ET
+# ESKİ SİNYALLERİ KONTROL
 # =========================
 
 def update_signal_results(
@@ -319,16 +315,11 @@ def update_signal_results(
 
     changed = False
 
-    completed = []
-
     for signal in signals:
 
         if signal.get(
             "result"
-        ) not in [
-            "OPEN",
-            "PENDING"
-        ]:
+        ) != "OPEN":
 
             continue
 
@@ -341,15 +332,10 @@ def update_signal_results(
             signal_time
         ]
 
-        if len(future) == 0:
-            continue
-
-        # En fazla 20 mum / 5 saat takip
         future = future.iloc[:20]
 
-        entry = float(
-            signal["entry"]
-        )
+        if len(future) == 0:
+            continue
 
         sl = float(
             signal["sl"]
@@ -367,10 +353,6 @@ def update_signal_results(
             signal["signal"]
         )
 
-        result = None
-        result_price = None
-        result_time = None
-
         for _, candle in future.iterrows():
 
             high = float(
@@ -381,7 +363,6 @@ def update_signal_results(
                 candle["low"]
             )
 
-            # BUY
             if signal_type == "BUY":
 
                 hit_sl = (
@@ -396,7 +377,6 @@ def update_signal_results(
                     high >= tp1
                 )
 
-            # SELL
             else:
 
                 hit_sl = (
@@ -411,86 +391,67 @@ def update_signal_results(
                     low <= tp1
                 )
 
-            # Aynı mumda hem SL hem TP
-            # görülürse hangisinin önce
-            # gerçekleştiğini bilmiyoruz.
-            # Güvenli tarafta kalıyoruz.
+            # Aynı mumda iki seviye görülürse
+            # güvenli tarafta SL kabul edilir.
+
             if hit_sl:
 
-                result = "SL"
+                signal["result"] = "SL"
 
-                result_price = sl
-                result_time = (
+                signal["result_price"] = sl
+
+                signal["result_time"] = (
                     candle["time"].isoformat()
                 )
+
+                changed = True
 
                 break
 
             elif hit_tp2:
 
-                result = "TP2"
+                signal["result"] = "TP2"
 
-                result_price = tp2
-                result_time = (
+                signal["result_price"] = tp2
+
+                signal["result_time"] = (
                     candle["time"].isoformat()
                 )
+
+                changed = True
 
                 break
 
             elif hit_tp1:
 
-                result = "TP1"
+                signal["result"] = "TP1"
 
-                result_price = tp1
-                result_time = (
+                signal["result_price"] = tp1
+
+                signal["result_time"] = (
                     candle["time"].isoformat()
                 )
 
+                changed = True
+
                 break
-
-        # 20 mum sonunda sonuç yoksa
-        # henüz açık bırakıyoruz.
-
-        if result:
-
-            signal["result"] = result
-
-            signal["result_price"] = (
-                result_price
-            )
-
-            signal["result_time"] = (
-                result_time
-            )
-
-            changed = True
-
-            completed.append(
-                signal
-            )
 
     return changed
 
 
 # =========================
-# PERFORMANS RAPORU
+# PERFORMANS
 # =========================
 
-def performance_report(
+def calculate_stats(
     signals
 ):
 
     finished = [
         s for s in signals
         if s.get("result")
-        in ["SL", "TP1", "TP2"]
+        in ["TP1", "TP2", "SL"]
     ]
-
-    if not finished:
-
-        return """
-Henüz tamamlanmış sinyal yok.
-"""
 
     total = len(finished)
 
@@ -505,64 +466,223 @@ Henüz tamamlanmış sinyal yok.
         if s["result"] == "SL"
     )
 
+    open_count = sum(
+        1 for s in signals
+        if s.get("result") == "OPEN"
+    )
+
     win_rate = (
         wins / total * 100
+        if total > 0
+        else 0
     )
 
-    buy_finished = [
-        s for s in finished
+    return (
+        total,
+        wins,
+        losses,
+        open_count,
+        win_rate
+    )
+
+
+# =========================
+# GÜNLÜK RAPOR
+# =========================
+
+def send_daily_report(
+    signals,
+    state
+):
+
+    today = datetime.now(
+        timezone.utc
+    ).date().isoformat()
+
+    if (
+        state.get(
+            "last_daily_report"
+        ) == today
+    ):
+
+        print(
+            "Bugünün raporu zaten gönderildi."
+        )
+
+        return
+
+    today_signals = []
+
+    for signal in signals:
+
+        signal_time = pd.Timestamp(
+            signal["time"]
+        )
+
+        if (
+            signal_time
+            .date()
+            .isoformat()
+            == today
+        ):
+
+            today_signals.append(
+                signal
+            )
+
+    total = len(
+        today_signals
+    )
+
+    buy = sum(
+        1 for s in today_signals
         if s["signal"] == "BUY"
-    ]
+    )
 
-    sell_finished = [
-        s for s in finished
+    sell = sum(
+        1 for s in today_signals
         if s["signal"] == "SELL"
-    ]
-
-    def rate(items):
-
-        if not items:
-            return 0
-
-        w = sum(
-            1 for s in items
-            if s["result"]
-            in ["TP1", "TP2"]
-        )
-
-        return (
-            w / len(items) * 100
-        )
-
-    buy_rate = rate(
-        buy_finished
     )
 
-    sell_rate = rate(
-        sell_finished
+    tp1 = sum(
+        1 for s in today_signals
+        if s.get("result") == "TP1"
     )
 
-    return f"""
-PERFORMANS
+    tp2 = sum(
+        1 for s in today_signals
+        if s.get("result") == "TP2"
+    )
 
-Toplam tamamlanan:
+    sl = sum(
+        1 for s in today_signals
+        if s.get("result") == "SL"
+    )
+
+    open_count = sum(
+        1 for s in today_signals
+        if s.get("result") == "OPEN"
+    )
+
+    finished = (
+        tp1 + tp2 + sl
+    )
+
+    if finished > 0:
+
+        success = (
+            (tp1 + tp2)
+            / finished
+            * 100
+        )
+
+    else:
+
+        success = 0
+
+    (
+        all_total,
+        all_wins,
+        all_losses,
+        all_open,
+        all_success
+    ) = calculate_stats(
+        signals
+    )
+
+    body = f"""
+XAUUSD GÜNLÜK SİNYAL RAPORU
+
+━━━━━━━━━━━━━━━━━━
+
+BUGÜN
+
+Toplam sinyal:
 {total}
 
+BUY:
+{buy}
+
+SELL:
+{sell}
+
+━━━━━━━━━━━━━━━━━━
+
+SONUÇLAR
+
+TP1:
+{tp1}
+
+TP2:
+{tp2}
+
+STOP LOSS:
+{sl}
+
+Açık:
+{open_count}
+
+Bugünkü başarı:
+%{success:.1f}
+
+━━━━━━━━━━━━━━━━━━
+
+GENEL PERFORMANS
+
+Tamamlanan:
+{all_total}
+
 Kazanan:
-{wins}
+{all_wins}
 
 Kaybeden:
-{losses}
+{all_losses}
+
+Açık:
+{all_open}
 
 Genel başarı:
-%{win_rate:.1f}
+%{all_success:.1f}
 
-BUY başarı:
-%{buy_rate:.1f}
+━━━━━━━━━━━━━━━━━━
 
-SELL başarı:
-%{sell_rate:.1f}
+Sistem:
+XAUUSD sinyal botu
+
+Zaman dilimi:
+15 dakika
+
+Otomatik işlem:
+KAPALI
+
+Veri kaynağı:
+Yahoo Finance / GC=F
+
+Not:
+GC=F ile XM XAUUSD fiyatı birebir
+aynı olmayabilir.
+
+Bu rapor teknik analiz
+performans takibi içindir.
 """
+
+    send_email(
+        "XAUUSD Günlük Rapor",
+        body
+    )
+
+    state[
+        "last_daily_report"
+    ] = today
+
+    save_state(
+        state
+
+    )
+
+    print(
+        "Günlük rapor gönderildi."
+    )
 
 
 # =========================
@@ -609,12 +729,14 @@ def create_signal(
     )
 
     candle_size = (
-        float(candle["high"]) -
+        float(candle["high"])
+        -
         float(candle["low"])
     )
 
     normal_candle = (
-        candle_size <= atr * 1.8
+        candle_size
+        <= atr * 1.8
     )
 
     enough_volatility = (
@@ -770,14 +892,19 @@ def create_signal(
 
         return None
 
-    # =========================
     # TP / SL
-    # =========================
 
-    sl_distance = atr * 1.2
+    sl_distance = (
+        atr * 1.2
+    )
 
-    tp1_distance = atr * 1.5
-    tp2_distance = atr * 2.2
+    tp1_distance = (
+        atr * 1.5
+    )
+
+    tp2_distance = (
+        atr * 2.2
+    )
 
     if signal == "BUY":
 
@@ -828,31 +955,58 @@ def create_signal(
             score,
 
         "entry":
-            round(price, 2),
+            round(
+                price,
+                2
+            ),
 
         "sl":
-            round(sl, 2),
+            round(
+                sl,
+                2
+            ),
 
         "tp1":
-            round(tp1, 2),
+            round(
+                tp1,
+                2
+            ),
 
         "tp2":
-            round(tp2, 2),
+            round(
+                tp2,
+                2
+            ),
 
         "atr":
-            round(atr, 2),
+            round(
+                atr,
+                2
+            ),
 
         "rsi":
-            round(rsi, 2),
+            round(
+                rsi,
+                2
+            ),
 
         "ema20":
-            round(ema20, 2),
+            round(
+                ema20,
+                2
+            ),
 
         "ema50":
-            round(ema50, 2),
+            round(
+                ema50,
+                2
+            ),
 
         "ema200":
-            round(ema200, 2),
+            round(
+                ema200,
+                2
+            ),
 
         "result":
             "OPEN",
@@ -863,14 +1017,13 @@ def create_signal(
 
 
 # =========================
-# ANA BOT
+# ANA FONKSİYON
 # =========================
 
 def run_bot():
 
     print(
-        "XAUUSD sinyal + performans "
-        "botu başlatıldı."
+        "XAUUSD sinyal botu başlatıldı."
     )
 
     df = get_market_data()
@@ -879,9 +1032,12 @@ def run_bot():
         df
     )
 
+    state = read_state()
+
     signals = read_signals()
 
-    # Önce eski sinyalleri kontrol et
+    # Eski sinyalleri güncelle
+
     changed = update_signal_results(
         df,
         signals
@@ -893,100 +1049,80 @@ def run_bot():
             signals
         )
 
-        print(
-            "Eski sinyaller güncellendi."
-        )
-
     # Son tamamlanmış mum
+
     candle = df.iloc[-2]
 
     candle_time = (
         candle["time"].isoformat()
     )
 
-    state = read_state()
+    # Aynı mum tekrar işlenmesin
 
     if (
         state.get(
             "last_processed"
-        ) == candle_time
+        )
+        != candle_time
     ):
 
-        print(
-            "Bu mum daha önce "
-            "kontrol edildi."
+        new_signal = create_signal(
+            df,
+            candle
         )
 
-        print(
-            performance_report(
-                signals
-            )
-        )
+        if new_signal:
 
-        return
-
-    new_signal = create_signal(
-        df,
-        candle
-    )
-
-    if new_signal:
-
-        # Aynı mum için tekrar sinyal
-        # engelle
-        already_exists = any(
-            s.get("time")
-            == candle_time
-            for s in signals
-        )
-
-        if not already_exists:
-
-            signals.append(
-                new_signal
+            already_exists = any(
+                s.get("time")
+                == candle_time
+                for s in signals
             )
 
-            # Çok eski sinyalleri tutma
-            signals = (
-                signals[-MAX_OPEN_SIGNALS:]
-            )
+            if not already_exists:
 
-            save_signals(
-                signals
-            )
+                signals.append(
+                    new_signal
+                )
 
-            reasons = "\n".join(
-                "- " + x
-                for x in
-                new_signal["reasons"]
-            )
+                save_signals(
+                    signals
+                )
 
-            message = f"""
+                reasons = "\n".join(
+                    "- " + r
+                    for r in
+                    new_signal[
+                        "reasons"
+                    ]
+                )
+
+                body = f"""
 XAUUSD ALTIN SİNYALİ
 
 ━━━━━━━━━━━━━━━━━━
 
-SİNYAL:
+Sinyal:
 {new_signal["signal"]}
 
-GÜÇ:
+Güç:
 {new_signal["strength"]}
 
-PUAN:
+Puan:
 {new_signal["score"]}/9
 
 ━━━━━━━━━━━━━━━━━━
 
-ENTRY:
+Entry:
 {new_signal["entry"]:.2f}
 
-STOP LOSS:
+Stop Loss:
 {new_signal["sl"]:.2f}
 
-TAKE PROFIT 1:
+Take Profit 1:
 {new_signal["tp1"]:.2f}
 
-TAKE PROFIT 2:
+Take Profit 2:
 {new_signal["tp2"]:.2f}
 
 ━━━━━━━━━━━━━━━━━━
@@ -1008,7 +1144,7 @@ EMA200:
 
 ━━━━━━━━━━━━━━━━━━
 
-NEDENLER:
+Sinyal nedenleri:
 
 {reasons}
 
@@ -1026,39 +1162,66 @@ Bu teknik analiz sinyalidir.
 XM XAUUSD fiyatıyla birebir
 aynı olmayabilir.
 
-Mum:
+Mum zamanı:
 {candle_time}
 """
 
-            send_email(
-                "XAUUSD "
-                + new_signal["signal"]
-                + " "
-                + new_signal["strength"],
-                message
-            )
+                send_email(
+                    "XAUUSD "
+                    + new_signal[
+                        "signal"
+                    ]
+                    + " "
+                    + new_signal[
+                        "strength"
+                    ],
+                    body
+                )
+
+                print(
+                    body
+                )
+
+        else:
 
             print(
-                message
+                "WAIT - Güçlü sinyal yok."
             )
+
+        state[
+            "last_processed"
+        ] = candle_time
+
+        save_state(
+            state
+        )
 
     else:
 
         print(
-            "WAIT - Güçlü sinyal yok."
+            "Bu mum daha önce işlendi."
         )
 
-    save_state(
-        candle_time
-    )
 
-    print(
-        performance_report(
-            signals
-        )
-    )
-
+# =========================
+# GÜNLÜK RAPORU ÇALIŞTIR
+# =========================
 
 if __name__ == "__main__":
 
     run_bot()
+
+    # GitHub Actions günlük rapor
+    # göndermek istediğinde:
+    if os.getenv(
+        "DAILY_REPORT"
+    ) == "1":
+
+        signals = read_signals()
+
+        state = read_state()
+
+        send_daily_report(
+            signals,
+            state
+        )
