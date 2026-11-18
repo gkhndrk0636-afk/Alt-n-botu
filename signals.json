@@ -536,8 +536,8 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "TP2",
+    "result_time": "2026-11-18T12:30:00+00:00"
   },
   {
     "id": "20261118114249",
@@ -562,8 +562,8 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "TP2",
+    "result_time": "2026-11-18T12:30:00+00:00"
   },
   {
     "id": "20261118124421",
@@ -586,6 +586,32 @@
       "EMA20 düşüyor",
       "RSI uygun (46.3)",
       "Fiyat EMA20 altında",
+      "Mum boyutu normal",
+      "Volatilite uygun"
+    ],
+    "result": "TP2",
+    "result_time": "2026-11-18T12:45:00+00:00"
+  },
+  {
+    "id": "20261118135946",
+    "time": "2026-11-18T13:45:00+00:00",
+    "direction": "BUY",
+    "score": 6,
+    "confidence": 65,
+    "strength": "ORTA",
+    "entry": 3789.3,
+    "sl": 3776.47,
+    "tp1": 3805.34,
+    "tp2": 3810.69,
+    "atr": 10.69,
+    "rsi": 58.25,
+    "ema20": 3773.48,
+    "ema50": 3786.43,
+    "ema200": 3833.57,
+    "reasons": [
+      "EMA20 yükseliyor",
+      "RSI uygun (58.2)",
+      "Fiyat EMA20 üzerinde",
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
