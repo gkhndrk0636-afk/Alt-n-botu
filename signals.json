@@ -509,8 +509,8 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "TP2",
+    "result_time": "2026-11-18T11:00:00+00:00"
   },
   {
     "id": "20261118104342",
@@ -532,6 +532,32 @@
       "EMA trendi aşağı",
       "EMA20 düşüyor",
       "RSI uygun (47.5)",
+      "Fiyat EMA20 altında",
+      "Mum boyutu normal",
+      "Volatilite uygun"
+    ],
+    "result": "OPEN",
+    "result_time": null
+  },
+  {
+    "id": "20261118114249",
+    "time": "2026-11-18T11:30:00+00:00",
+    "direction": "SELL",
+    "score": 7,
+    "confidence": 75,
+    "strength": "İYİ",
+    "entry": 3768.5,
+    "sl": 3777.91,
+    "tp1": 3756.74,
+    "tp2": 3752.81,
+    "atr": 7.84,
+    "rsi": 54.42,
+    "ema20": 3775.8,
+    "ema50": 3793.33,
+    "ema200": 3839.57,
+    "reasons": [
+      "EMA trendi aşağı",
+      "EMA20 düşüyor",
       "Fiyat EMA20 altında",
       "Mum boyutu normal",
       "Volatilite uygun"
