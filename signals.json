@@ -799,8 +799,8 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "SL",
+    "result_time": "2026-11-18T23:15:00+00:00"
   },
   {
     "id": "20261118204308",
@@ -825,8 +825,8 @@
       "Fiyat EMA20 altında",
       "Mum boyutu normal"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "SL",
+    "result_time": "2026-11-18T23:15:00+00:00"
   },
   {
     "id": "20261118211420",
@@ -851,8 +851,8 @@
       "Fiyat EMA20 altında",
       "Mum boyutu normal"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "SL",
+    "result_time": "2026-11-18T23:00:00+00:00"
   },
   {
     "id": "20261118220607",
@@ -877,7 +877,7 @@
       "Fiyat EMA20 altında",
       "Mum boyutu normal"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "SL",
+    "result_time": "2026-11-18T23:00:00+00:00"
   }
 ]
