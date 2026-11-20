@@ -1846,6 +1846,31 @@
       "Fiyat EMA20 altında",
       "Mum boyutu normal"
     ],
+    "result": "SL",
+    "result_time": "2026-11-20T13:00:00+00:00"
+  },
+  {
+    "id": "20261120132955",
+    "time": "2026-11-20T13:15:00+00:00",
+    "direction": "SELL",
+    "score": 6,
+    "confidence": 65,
+    "strength": "ORTA",
+    "entry": 3569.8,
+    "sl": 3581.0,
+    "tp1": 3555.8,
+    "tp2": 3551.13,
+    "atr": 9.34,
+    "rsi": 50.59,
+    "ema20": 3575.56,
+    "ema50": 3582.4,
+    "ema200": 3667.84,
+    "reasons": [
+      "EMA trendi aşağı",
+      "EMA20 düşüyor",
+      "Fiyat EMA20 altında",
+      "Mum boyutu normal"
+    ],
     "result": "OPEN",
     "result_time": null
   }
