@@ -1820,6 +1820,32 @@
       "RSI uygun (44.9)",
       "Mum boyutu normal"
     ],
+    "result": "TP1",
+    "result_time": "2026-11-20T12:00:00+00:00"
+  },
+  {
+    "id": "20261120130158",
+    "time": "2026-11-20T12:45:00+00:00",
+    "direction": "SELL",
+    "score": 8,
+    "confidence": 85,
+    "strength": "GÜÇLÜ",
+    "entry": 3567.2,
+    "sl": 3578.09,
+    "tp1": 3553.59,
+    "tp2": 3549.06,
+    "atr": 9.07,
+    "rsi": 46.43,
+    "ema20": 3575.97,
+    "ema50": 3583.1,
+    "ema200": 3669.73,
+    "reasons": [
+      "EMA trendi aşağı",
+      "EMA20 düşüyor",
+      "RSI uygun (46.4)",
+      "Fiyat EMA20 altında",
+      "Mum boyutu normal"
+    ],
     "result": "OPEN",
     "result_time": null
   }
