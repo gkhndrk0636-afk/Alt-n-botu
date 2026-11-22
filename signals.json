@@ -2401,5 +2401,31 @@
     ],
     "result": "SL",
     "result_time": "2026-11-22T23:10:05+00:00"
+  },
+  {
+    "id": "20261122232347",
+    "time": "2026-11-22T23:00:00+00:00",
+    "direction": "BUY",
+    "score": 6,
+    "confidence": 65,
+    "strength": "ORTA",
+    "entry": 3570.8,
+    "sl": 3546.01,
+    "tp1": 3601.79,
+    "tp2": 3612.11,
+    "atr": 20.66,
+    "rsi": 66.18,
+    "ema20": 3530.41,
+    "ema50": 3545.02,
+    "ema200": 3629.32,
+    "reasons": [
+      "EMA20 yükseliyor",
+      "RSI uygun (66.2)",
+      "Fiyat EMA20 üzerinde",
+      "Mum boyutu normal",
+      "Volatilite uygun"
+    ],
+    "result": "OPEN",
+    "result_time": null
   }
 ]
