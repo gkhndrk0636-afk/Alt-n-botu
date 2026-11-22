@@ -2133,8 +2133,8 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "SL",
+    "result_time": "2026-11-22T23:10:05+00:00"
   },
   {
     "id": "20261120185644",
@@ -2373,8 +2373,8 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "SL",
+    "result_time": "2026-11-22T23:10:05+00:00"
   },
   {
     "id": "20261122055404",
@@ -2399,7 +2399,7 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "SL",
+    "result_time": "2026-11-22T23:10:05+00:00"
   }
 ]
