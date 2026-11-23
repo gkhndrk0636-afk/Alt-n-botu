@@ -2557,5 +2557,32 @@
     ],
     "result": "OPEN",
     "result_time": null
+  },
+  {
+    "id": "20261123152941",
+    "time": "2026-11-23T15:15:00+00:00",
+    "direction": "BUY",
+    "score": 9,
+    "confidence": 92,
+    "strength": "ÇOK GÜÇLÜ",
+    "entry": 3669.0,
+    "sl": 3649.28,
+    "tp1": 3693.65,
+    "tp2": 3701.87,
+    "atr": 16.44,
+    "rsi": 67.29,
+    "ema20": 3643.74,
+    "ema50": 3623.19,
+    "ema200": 3621.57,
+    "reasons": [
+      "EMA trendi yukarı",
+      "EMA20 yükseliyor",
+      "RSI uygun (67.3)",
+      "Fiyat EMA20 üzerinde",
+      "Mum boyutu normal",
+      "Volatilite uygun"
+    ],
+    "result": "OPEN",
+    "result_time": null
   }
 ]
