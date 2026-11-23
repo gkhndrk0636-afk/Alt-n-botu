@@ -2425,8 +2425,8 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "TP1",
+    "result_time": "2026-11-23T01:00:00+00:00"
   },
   {
     "id": "20261122232846",
@@ -2451,8 +2451,8 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "TP1",
+    "result_time": "2026-11-23T01:00:00+00:00"
   },
   {
     "id": "20261123001141",
@@ -2477,8 +2477,8 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "TP1",
+    "result_time": "2026-11-23T01:00:00+00:00"
   },
   {
     "id": "20261123003510",
@@ -2503,7 +2503,7 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
-    "result": "OPEN",
-    "result_time": null
+    "result": "TP2",
+    "result_time": "2026-11-23T01:00:00+00:00"
   }
 ]
