@@ -2740,6 +2740,32 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
+    "result": "TP1",
+    "result_time": "2026-11-24T08:15:00+00:00"
+  },
+  {
+    "id": "20261124093004",
+    "time": "2026-11-24T09:15:00+00:00",
+    "direction": "SELL",
+    "score": 6,
+    "confidence": 65,
+    "strength": "ORTA",
+    "entry": 3616.0,
+    "sl": 3628.96,
+    "tp1": 3599.8,
+    "tp2": 3594.4,
+    "atr": 10.8,
+    "rsi": 39.95,
+    "ema20": 3624.14,
+    "ema50": 3631.6,
+    "ema200": 3628.1,
+    "reasons": [
+      "EMA20 düşüyor",
+      "RSI uygun (39.9)",
+      "Fiyat EMA20 altında",
+      "Mum boyutu normal",
+      "Volatilite uygun"
+    ],
     "result": "OPEN",
     "result_time": null
   }
