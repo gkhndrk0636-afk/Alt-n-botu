@@ -2924,5 +2924,31 @@
     ],
     "result": "OPEN",
     "result_time": null
+  },
+  {
+    "id": "20261124195929",
+    "time": "2026-11-24T19:45:00+00:00",
+    "direction": "SELL",
+    "score": 8,
+    "confidence": 85,
+    "strength": "GÜÇLÜ",
+    "entry": 3558.0,
+    "sl": 3567.49,
+    "tp1": 3546.14,
+    "tp2": 3542.19,
+    "atr": 7.91,
+    "rsi": 43.09,
+    "ema20": 3571.04,
+    "ema50": 3593.23,
+    "ema200": 3616.55,
+    "reasons": [
+      "EMA trendi aşağı",
+      "EMA20 düşüyor",
+      "RSI uygun (43.1)",
+      "Fiyat EMA20 altında",
+      "Mum boyutu normal"
+    ],
+    "result": "OPEN",
+    "result_time": null
   }
 ]
