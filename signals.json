@@ -3363,6 +3363,32 @@
       "Mum boyutu normal",
       "Volatilite uygun"
     ],
+    "result": "SL",
+    "result_time": "2026-11-25T16:45:00+00:00"
+  },
+  {
+    "id": "20261125171711",
+    "time": "2026-11-25T17:00:00+00:00",
+    "direction": "BUY",
+    "score": 6,
+    "confidence": 65,
+    "strength": "ORTA",
+    "entry": 3514.5,
+    "sl": 3491.01,
+    "tp1": 3543.87,
+    "tp2": 3553.66,
+    "atr": 19.58,
+    "rsi": 53.41,
+    "ema20": 3501.58,
+    "ema50": 3521.35,
+    "ema200": 3562.76,
+    "reasons": [
+      "EMA20 yükseliyor",
+      "RSI uygun (53.4)",
+      "Fiyat EMA20 üzerinde",
+      "Mum boyutu normal",
+      "Volatilite uygun"
+    ],
     "result": "OPEN",
     "result_time": null
   }
